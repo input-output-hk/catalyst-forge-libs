@@ -1,3 +1,5 @@
+//go:build integration
+
 // Package ocibundle provides integration tests for the OCI Bundle Distribution Module.
 // This file contains tests that verify the client works correctly against real registries.
 //

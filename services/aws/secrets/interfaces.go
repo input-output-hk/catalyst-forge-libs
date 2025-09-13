@@ -7,7 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 )
 
-//go:generate go run github.com/matryer/moq -out ./mocks/secretsmanager_api.go -pkg mocks . ManagerAPI
+//go:generate go run github.com/matryer/moq@v0.5.3 -out ./mocks/secretsmanager_api.go -pkg mocks . ManagerAPI
 
 // ManagerAPI defines the interface for AWS Secrets Manager operations.
 // This interface abstracts the AWS SDK v2 SecretsManager client to enable
