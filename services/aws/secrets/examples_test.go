@@ -2,6 +2,7 @@ package secrets
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -20,7 +21,11 @@ func newFakeAPI() *fakeAPI {
 	return &fakeAPI{store: make(map[string]*secretsmanager.GetSecretValueOutput)}
 }
 
-func (f *fakeAPI) GetSecretValue(ctx context.Context, in *secretsmanager.GetSecretValueInput, _ ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error) {
+func (f *fakeAPI) GetSecretValue(
+	ctx context.Context,
+	in *secretsmanager.GetSecretValueInput,
+	_ ...func(*secretsmanager.Options),
+) (*secretsmanager.GetSecretValueOutput, error) {
 	if in == nil || in.SecretId == nil || *in.SecretId == "" {
 		return nil, fmt.Errorf("invalid secret id")
 	}
@@ -31,7 +36,11 @@ func (f *fakeAPI) GetSecretValue(ctx context.Context, in *secretsmanager.GetSecr
 	return out, nil
 }
 
-func (f *fakeAPI) PutSecretValue(ctx context.Context, in *secretsmanager.PutSecretValueInput, _ ...func(*secretsmanager.Options)) (*secretsmanager.PutSecretValueOutput, error) {
+func (f *fakeAPI) PutSecretValue(
+	ctx context.Context,
+	in *secretsmanager.PutSecretValueInput,
+	_ ...func(*secretsmanager.Options),
+) (*secretsmanager.PutSecretValueOutput, error) {
 	if in == nil || in.SecretId == nil || *in.SecretId == "" {
 		return nil, fmt.Errorf("invalid secret id")
 	}
@@ -42,7 +51,11 @@ func (f *fakeAPI) PutSecretValue(ctx context.Context, in *secretsmanager.PutSecr
 	return &secretsmanager.PutSecretValueOutput{}, nil
 }
 
-func (f *fakeAPI) CreateSecret(ctx context.Context, in *secretsmanager.CreateSecretInput, _ ...func(*secretsmanager.Options)) (*secretsmanager.CreateSecretOutput, error) {
+func (f *fakeAPI) CreateSecret(
+	ctx context.Context,
+	in *secretsmanager.CreateSecretInput,
+	_ ...func(*secretsmanager.Options),
+) (*secretsmanager.CreateSecretOutput, error) {
 	if in == nil || in.Name == nil || *in.Name == "" {
 		return nil, fmt.Errorf("invalid secret name")
 	}
@@ -53,17 +66,26 @@ func (f *fakeAPI) CreateSecret(ctx context.Context, in *secretsmanager.CreateSec
 		return nil, fmt.Errorf("already exists")
 	}
 	f.store[*in.Name] = &secretsmanager.GetSecretValueOutput{SecretString: in.SecretString}
-	return &secretsmanager.CreateSecretOutput{ARN: aws.String("arn:aws:secretsmanager:region:acct:secret:" + *in.Name)}, nil
+	return &secretsmanager.CreateSecretOutput{
+		ARN: aws.String("arn:aws:secretsmanager:region:acct:secret:" + *in.Name),
+	}, nil
 }
 
-func (f *fakeAPI) DescribeSecret(ctx context.Context, in *secretsmanager.DescribeSecretInput, _ ...func(*secretsmanager.Options)) (*secretsmanager.DescribeSecretOutput, error) {
+func (f *fakeAPI) DescribeSecret(
+	ctx context.Context,
+	in *secretsmanager.DescribeSecretInput,
+	_ ...func(*secretsmanager.Options),
+) (*secretsmanager.DescribeSecretOutput, error) {
 	if in == nil || in.SecretId == nil || *in.SecretId == "" {
 		return nil, fmt.Errorf("invalid secret id")
 	}
 	if _, ok := f.store[*in.SecretId]; !ok {
 		return nil, &fakeAPIError{code: ResourceNotFoundException, message: "not found"}
 	}
-	return &secretsmanager.DescribeSecretOutput{Name: in.SecretId, ARN: aws.String("arn:aws:secretsmanager:region:acct:secret:" + *in.SecretId)}, nil
+	return &secretsmanager.DescribeSecretOutput{
+		Name: in.SecretId,
+		ARN:  aws.String("arn:aws:secretsmanager:region:acct:secret:" + *in.SecretId),
+	}, nil
 }
 
 // fakeAPIError implements smithy.APIError to exercise error mapping in examples.
@@ -125,7 +147,13 @@ func Example_caching() {
 func Example_customRetry() {
 	ctx := context.Background()
 	cfg := aws.Config{Region: "us-east-1"}
-	client, err := NewClientWithConfig(ctx, &cfg, WithCustomRetryer(&CustomRetryer{maxAttempts: 5, baseDelay: 50 * time.Millisecond, maxDelay: 500 * time.Millisecond}))
+	client, err := NewClientWithConfig(
+		ctx,
+		&cfg,
+		WithCustomRetryer(
+			&CustomRetryer{maxAttempts: 5, baseDelay: 50 * time.Millisecond, maxDelay: 500 * time.Millisecond},
+		),
+	)
 	if err != nil {
 		fmt.Println("error:", err)
 		return
@@ -154,7 +182,7 @@ func Example_errorHandling() {
 	_, err = client.GetSecret(ctx, "missing/secret")
 	if err != nil {
 		// Map smithy error to typed error via handleError
-		if err == ErrSecretNotFound {
+		if errors.Is(err, ErrSecretNotFound) {
 			fmt.Println("not found")
 		} else {
 			fmt.Println("other error")
