@@ -4,7 +4,7 @@ package oras
 
 import "context"
 
-//go:generate go run github.com/matryer/moq@latest -pkg mocks -out mocks/oras_client.go . Client
+//go:generate go run github.com/matryer/moq@v0.5.3 -pkg mocks -out mocks/oras_client.go . Client
 
 // Client defines the interface for ORAS operations that can be mocked for testing.
 type Client interface {
