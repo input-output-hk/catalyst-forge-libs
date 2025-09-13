@@ -1,0 +1,133 @@
+version: "2"
+
+run:
+  relative-path-mode: gomod # resolve globs relative to module root
+  modules-download-mode: readonly # fail CI if go.mod/go.sum would change
+  allow-parallel-runners: true
+  tests: true
+
+# Code formatters run by `golangci-lint fmt` (and honored by `run --fix`).
+formatters:
+  enable:
+    - gofumpt
+    - gci
+    - golines
+  settings:
+    gofumpt:
+      extra-rules: true # stricter gofmt
+    gci: # deterministic, team-friendly imports
+      custom-order: true
+      sections: # std → 3rd party → local module
+        - standard
+        - default
+        - localmodule
+      no-inline-comments: true
+      no-prefix-comments: true
+    golines:
+      max-len: 120 # wrap long lines nicely
+      shorten-comments: true
+
+linters:
+  # Start from the curated default set, then add high-signal extras.
+  default: standard
+  enable:
+    # correctness & fundamentals
+    - staticcheck # includes gosimple/stylecheck set
+    - govet
+    - errcheck
+    - errorlint
+    - wrapcheck
+    - revive
+    - nolintlint
+    - ineffassign
+    - copyloopvar # catches range variable pitfalls
+    # API & style hygiene
+    - gocritic
+    - goconst
+    - ireturn # accept interfaces, return concrete
+    - usestdlibvars
+    - exptostd # prefer stdlib over x/exp
+    - unconvert
+    # complexity (kept reasonable)
+    - cyclop
+    - funlen
+    - nestif
+    # I/O / DB safety
+    - bodyclose
+    - rowserrcheck
+    - sqlclosecheck
+    - errchkjson
+    # logging consistency (no effect if you don’t use slog)
+    - sloglint
+
+  settings:
+    govet:
+      enable: [shadow] # var shadowing is a common footgun
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+      allow-unused: false
+    gocritic:
+      enabled-tags: [diagnostic, performance, style]
+      disabled-tags: [experimental, opinionated]
+    cyclop:
+      max-complexity: 15
+    funlen:
+      lines: 120
+      statements: 60
+      ignore-comments: true
+    revive: # lean "recommended" core
+      severity: warning
+      rules:
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+        - name: indent-error-flow
+        - name: var-naming
+        - name: var-declaration
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: empty-block
+        - name: superfluous-else
+        - name: errorf
+        - name: increment-decrement
+        - name: unreachable-code
+    depguard: # block obviously-bad imports
+      rules:
+        main:
+          list-mode: strict
+          allow: [$gostd]
+          deny:
+            - pkg: "io/ioutil$" # deprecated; use io/os
+              desc: "Use io and os; ioutil is deprecated."
+            - pkg: "github.com/pkg/errors" # prefer %w and stdlib errors
+              desc: "Use Go 1.13+ errors with %w."
+            - pkg: "math/rand$" # prefer v2 in new code
+              desc: "Use math/rand/v2 in new code."
+
+  # Trim unavoidable noise while staying strict elsewhere.
+  exclusions:
+    presets:
+      - std-error-handling
+      - common-false-positives
+    rules:
+      # Tests: keep signal high, avoid style/security noise
+      - path: "_test\\.go"
+        linters:
+          - bodyclose
+          - dupl
+          - funlen
+          - gocyclo
+          - goconst
+          - gosec
+          - noctx
+          - wrapcheck
+
+output:
+  sort-order: [severity, file]
