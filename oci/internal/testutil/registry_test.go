@@ -1,3 +1,5 @@
+//go:build integration
+
 // Package testutil provides testing utilities for the OCI bundle library.
 // This file contains tests for the registry utilities.
 package testutil
