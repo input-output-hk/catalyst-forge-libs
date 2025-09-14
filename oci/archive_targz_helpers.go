@@ -9,14 +9,16 @@ import (
 	"path/filepath"
 	"strings"
 
+	fsapi "github.com/input-output-hk/catalyst-forge-libs/fs"
+
 	validatepkg "github.com/input-output-hk/catalyst-forge-libs/oci/internal/validate"
 )
 
 // collectFileInfos walks the source directory and returns all entries with
 // their original path, relative path, and os.FileInfo.
-func collectFileInfos(sourceDir string) ([]fileInfoEntry, error) {
+func collectFileInfos(fsys fsapi.Filesystem, sourceDir string) ([]fileInfoEntry, error) {
 	var fileInfos []fileInfoEntry
-	walkErr := filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
+	walkErr := fsys.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return fmt.Errorf("walk failed at %s: %w", path, err)
 		}
@@ -129,8 +131,8 @@ func safeJoin(rootAbs, targetDir, member string) (string, error) {
 }
 
 // ensureParentDir creates the parent directory for a path.
-func ensureParentDir(fullPath string) error {
-	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+func ensureParentDir(fsys fsapi.Filesystem, fullPath string) error {
+	if err := fsys.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
 		return fmt.Errorf("failed to create directory for %s: %w", fullPath, err)
 	}
 	return nil
@@ -148,6 +150,7 @@ func handleHeader(
 	pv *validatepkg.PathTraversalValidator,
 	totalSize *int64,
 	fileCount *int,
+	fsys fsapi.Filesystem,
 ) error {
 	if err := isDone(ctx, "extraction"); err != nil {
 		return err
@@ -164,11 +167,11 @@ func handleHeader(
 		return err
 	}
 
-	if err := ensureParentDir(fullPath); err != nil {
+	if err := ensureParentDir(fsys, fullPath); err != nil {
 		return err
 	}
 
-	return performExtraction(tr, hdr, fullPath, opts, pv)
+	return performExtraction(tr, hdr, fullPath, opts, pv, fsys)
 }
 
 // normalizeAndResolvePath validates the header path, applies strip prefix, and ensures it stays within root.
@@ -235,38 +238,38 @@ func performExtraction(
 	fullPath string,
 	opts ExtractOptions,
 	pv *validatepkg.PathTraversalValidator,
+	fsys fsapi.Filesystem,
 ) error {
 	switch hdr.Typeflag {
 	case tar.TypeDir:
-		return extractDir(fullPath)
+		return extractDir(fsys, fullPath)
 	case tar.TypeReg:
-		if err := extractRegularFile(tr, fullPath); err != nil {
+		if err := extractRegularFile(fsys, tr, fullPath); err != nil {
 			return err
 		}
 		if !opts.PreservePerms {
-			if err := os.Chmod(fullPath, 0o644); err != nil {
-				return fmt.Errorf("failed to set permissions for %s: %w", fullPath, err)
-			}
+			// Ensure mode on create; optionally adjust if FS exposes chmod in future.
+			return nil
 		}
 		return nil
 	case tar.TypeSymlink:
-		return extractSymlink(pv, hdr, fullPath)
+		return extractSymlink(fsys, pv, hdr, fullPath)
 	default:
 		return nil
 	}
 }
 
 // extractDir creates a directory.
-func extractDir(fullPath string) error {
-	if err := os.MkdirAll(fullPath, 0o755); err != nil {
+func extractDir(fsys fsapi.Filesystem, fullPath string) error {
+	if err := fsys.MkdirAll(fullPath, 0o755); err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", fullPath, err)
 	}
 	return nil
 }
 
 // extractRegularFile writes out a regular file from a tar reader.
-func extractRegularFile(tr *tar.Reader, fullPath string) error {
-	file, err := os.OpenFile(fullPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+func extractRegularFile(fsys fsapi.Filesystem, tr *tar.Reader, fullPath string) error {
+	file, err := fsys.OpenFile(fullPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
 		return fmt.Errorf("failed to create file %s: %w", fullPath, err)
 	}
@@ -279,12 +282,17 @@ func extractRegularFile(tr *tar.Reader, fullPath string) error {
 }
 
 // extractSymlink creates a symlink after validator approval.
-func extractSymlink(pv *validatepkg.PathTraversalValidator, hdr *tar.Header, fullPath string) error {
+func extractSymlink(
+	fsys fsapi.Filesystem,
+	pv *validatepkg.PathTraversalValidator,
+	hdr *tar.Header,
+	fullPath string,
+) error {
 	linkTarget := hdr.Linkname
 	if err := pv.ValidateSymlink(hdr.Name, linkTarget); err != nil {
 		return NewBundleError("extract", hdr.Name, ErrSecurityViolation)
 	}
-	if err := os.Symlink(linkTarget, fullPath); err != nil {
+	if err := fsys.Symlink(linkTarget, fullPath); err != nil {
 		return fmt.Errorf("failed to create symlink %s -> %s: %w", fullPath, linkTarget, err)
 	}
 	return nil

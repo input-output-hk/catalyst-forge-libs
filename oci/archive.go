@@ -5,6 +5,9 @@ package ocibundle
 import (
 	"context"
 	"io"
+
+	fsapi "github.com/input-output-hk/catalyst-forge-libs/fs"
+	billyfs "github.com/input-output-hk/catalyst-forge-libs/fs/billy"
 )
 
 // Archiver handles compression/decompression of file bundles.
@@ -42,6 +45,15 @@ type Archiver interface {
 	MediaType() string
 }
 
+// NewTarGzArchiverWithFS returns a tar.gz archiver bound to the provided filesystem.
+// Phase 0 placeholder: the filesystem will be used internally starting in Phase 1.
+func NewTarGzArchiverWithFS(fsys fsapi.Filesystem) *TarGzArchiver {
+	if fsys == nil {
+		fsys = billyfs.NewBaseOSFS()
+	}
+	return &TarGzArchiver{fs: fsys}
+}
+
 // ExtractOptions controls extraction behavior and security constraints.
 // These options provide safety limits to prevent various attack vectors
 // such as zip bombs, path traversal attacks, and resource exhaustion.
@@ -77,6 +89,12 @@ var DefaultExtractOptions = ExtractOptions{
 	MaxFileSize:   100 * 1024 * 1024,      // 100MB
 	StripPrefix:   "",
 	PreservePerms: false,
+}
+
+// DefaultArchiver returns an archiver initialized with the default OS-backed filesystem.
+func DefaultArchiver() *TarGzArchiver {
+	_ = billyfs.NewBaseOSFS() // reserved for future internal use
+	return NewTarGzArchiver()
 }
 
 // TODO: Implement archive implementations

@@ -31,6 +31,12 @@ func NewArchiveGenerator() (*ArchiveGenerator, error) {
 	return &ArchiveGenerator{tempDir: tempDir}, nil
 }
 
+// NewArchiveGeneratorWithFSTemp creates a new archive generator using a provided filesystem root path.
+// Tests can pass an in-memory root path when using a memfs implementation.
+func NewArchiveGeneratorWithFSTemp(root string) *ArchiveGenerator {
+	return &ArchiveGenerator{tempDir: root}
+}
+
 // Close cleans up the temporary directory used by the generator.
 func (g *ArchiveGenerator) Close() error {
 	if g.tempDir != "" {

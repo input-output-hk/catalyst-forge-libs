@@ -295,6 +295,59 @@ go test -run TestClient_Push ./lib/oci/
 - **Security Tests**: Malicious archive testing
 - **Benchmark Tests**: Performance validation
 
+## Filesystem Injection and In-Memory Testing
+
+The client and archiver operate over an abstract filesystem interface so you can swap the backing store.
+
+- Default: OS filesystem (rooted at "/").
+- Custom: Inject any implementation (e.g., in-memory) for tests.
+
+```go
+import (
+    billyfs "github.com/input-output-hk/catalyst-forge-libs/fs/billy"
+    ocibundle "github.com/input-output-hk/catalyst-forge-libs/oci"
+)
+
+// In-memory filesystem for fast, isolated tests
+mem := billyfs.NewInMemoryFS()
+
+client, err := ocibundle.NewWithOptions(
+    ocibundle.WithFilesystem(mem),
+)
+if err != nil { /* handle */ }
+
+// Use the same FS with the archiver
+archiver := ocibundle.NewTarGzArchiverWithFS(mem)
+
+// Build fixture
+_ = mem.MkdirAll("/src", 0o755)
+_ = mem.WriteFile("/src/hello.txt", []byte("hi"), 0o644)
+
+// Archive and extract entirely in-memory
+var buf bytes.Buffer
+_ = archiver.Archive(context.Background(), "/src", &buf)
+_ = archiver.Extract(context.Background(), &buf, "/dst", ocibundle.DefaultExtractOptions)
+
+b, _ := mem.ReadFile("/dst/hello.txt")
+```
+
+### Unit Tests: Avoiding Network Dependencies
+
+Unit tests should not perform real network calls. Inject a mocked ORAS client and disable retries to keep tests fast and deterministic:
+
+```go
+mock := &mocks.ClientMock{
+    PushFunc: func(ctx context.Context, ref string, d *oras.PushDescriptor, a *oras.AuthOptions) error { return fmt.Errorf("simulated push error") },
+    PullFunc: func(ctx context.Context, ref string, a *oras.AuthOptions) (*oras.PullDescriptor, error) { /* return small tar.gz */ return desc, nil },
+}
+client, _ := ocibundle.NewWithOptions(
+    ocibundle.WithORASClient(mock),
+    ocibundle.WithFilesystem(billyfs.NewInMemoryFS()),
+)
+// Disable retries in tests that expect error paths
+_ = client.Push(ctx, "/src", "example/repo:tag", ocibundle.WithMaxRetries(0), ocibundle.WithRetryDelay(0))
+```
+
 ## Registry Compatibility
 
 ### OCI Compliance

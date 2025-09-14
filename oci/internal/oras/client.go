@@ -165,9 +165,6 @@ func NewRepository(ctx context.Context, reference string, opts *AuthOptions) (*r
 	return repo, nil
 }
 
-// shouldApplyHTTPConfig determines if HTTP configuration should be applied to a registry.
-// It checks if the registry matches any of the configured registries or if no specific
-// registries are configured (applies to all).
 func shouldApplyHTTPConfig(reference string, config *HTTPConfig) bool {
 	// If no specific registries are configured, apply to all
 	if len(config.Registries) == 0 {
@@ -215,18 +212,7 @@ type PushDescriptor struct {
 }
 
 // Push pushes an artifact to an OCI registry using ORAS.
-// It pushes the content directly using ORAS TagBytes function.
-//
-// Parameters:
-//   - ctx: Context for the operation
-//   - reference: Full OCI reference (e.g., "ghcr.io/org/repo:tag")
-//   - descriptor: Description of the content to push
-//   - opts: Authentication options (can be nil for default behavior)
-//
-// Returns an error if the push operation fails.
-//
-// NOTE: Current implementation loads entire content into memory for digest calculation.
-// TODO: Optimize for streaming to maintain constant memory usage for large files.
+// Buffered implementation for maximum compatibility with current ORAS API.
 func Push(ctx context.Context, reference string, descriptor *PushDescriptor, opts *AuthOptions) error {
 	if descriptor == nil {
 		return fmt.Errorf("descriptor cannot be nil")
@@ -264,15 +250,15 @@ func Push(ctx context.Context, reference string, descriptor *PushDescriptor, opt
 	// 2) Pack an OCI 1.1 manifest with artifactType and empty config
 	packOpts := oras.PackManifestOptions{Layers: []ocispec.Descriptor{blobDesc}}
 	artifactType := "application/vnd.catalyst.bundle.v1"
-	manDesc, err := oras.PackManifest(ctx, repo, oras.PackManifestVersion1_1, artifactType, packOpts)
-	if err != nil {
-		return mapORASError("push", reference, fmt.Errorf("pack manifest v1.1: %w", err))
+	manDesc, pErr := oras.PackManifest(ctx, repo, oras.PackManifestVersion1_1, artifactType, packOpts)
+	if pErr != nil {
+		return mapORASError("push", reference, fmt.Errorf("pack manifest v1.1: %w", pErr))
 	}
 
 	// 3) Tag the manifest with the requested ref
-	_, err = oras.Tag(ctx, repo, manDesc.Digest.String(), refPart)
-	if err != nil {
-		return mapORASError("push", reference, fmt.Errorf("tag manifest: %w", err))
+	_, tErr := oras.Tag(ctx, repo, manDesc.Digest.String(), refPart)
+	if tErr != nil {
+		return mapORASError("push", reference, fmt.Errorf("tag manifest: %w", tErr))
 	}
 
 	return nil

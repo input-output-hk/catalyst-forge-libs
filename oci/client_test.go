@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	billyfs "github.com/input-output-hk/catalyst-forge-libs/fs/billy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2/registry/remote/auth"
@@ -164,7 +165,12 @@ func TestClient_Push_BasicFunctionality(t *testing.T) {
 	// Clear any cached credentials to ensure test isolation
 	oras.ClearAuthCache()
 
-	client, err := New()
+	mockORAS := &mocks.ClientMock{
+		PushFunc: func(ctx context.Context, reference string, descriptor *oras.PushDescriptor, opts *oras.AuthOptions) error {
+			return fmt.Errorf("simulated push error")
+		},
+	}
+	client, err := NewWithOptions(WithORASClient(mockORAS))
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -175,8 +181,8 @@ func TestClient_Push_BasicFunctionality(t *testing.T) {
 	err = os.WriteFile(testFile, []byte("test content"), 0o644)
 	require.NoError(t, err)
 
-	// This should attempt to push to registry (will fail due to auth)
-	err = client.Push(ctx, sourceDir, "ghcr.io/test/repo:tag")
+	// This should attempt to push via mock (will fail with simulated error)
+	err = client.Push(ctx, sourceDir, "ghcr.io/test/repo:tag", WithMaxRetries(0), WithRetryDelay(0))
 	assert.Error(t, err)
 	// Should contain authentication or push-related error, not "not implemented"
 	assert.NotContains(t, err.Error(), "Push not yet implemented")
@@ -185,7 +191,12 @@ func TestClient_Push_BasicFunctionality(t *testing.T) {
 
 // TestClient_Push_WithOptions tests push with various options
 func TestClient_Push_WithOptions(t *testing.T) {
-	client, err := New()
+	mockORAS := &mocks.ClientMock{
+		PushFunc: func(ctx context.Context, reference string, descriptor *oras.PushDescriptor, opts *oras.AuthOptions) error {
+			return fmt.Errorf("simulated push error")
+		},
+	}
+	client, err := NewWithOptions(WithORASClient(mockORAS))
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -212,11 +223,12 @@ func TestClient_Push_WithOptions(t *testing.T) {
 		progressCalls = append(progressCalls, current)
 	}
 
-	// This should attempt to push (will fail due to auth)
+	// This should attempt to push (mocked) and fail with simulated error
 	err = client.Push(ctx, sourceDir, "ghcr.io/test/repo:tag",
 		WithAnnotations(annotations),
 		WithPlatform(platform),
-		WithProgressCallback(progressCallback))
+		WithProgressCallback(progressCallback),
+		WithMaxRetries(0), WithRetryDelay(0))
 	assert.Error(t, err)
 	assert.NotContains(t, err.Error(), "Push not yet implemented")
 	assert.Contains(t, err.Error(), "failed to push artifact")
@@ -224,16 +236,21 @@ func TestClient_Push_WithOptions(t *testing.T) {
 
 // TestClient_Push_ErrorHandling tests error handling and cleanup
 func TestClient_Push_ErrorHandling(t *testing.T) {
-	client, err := New()
+	mockORAS := &mocks.ClientMock{
+		PushFunc: func(ctx context.Context, reference string, descriptor *oras.PushDescriptor, opts *oras.AuthOptions) error {
+			return fmt.Errorf("simulated push error")
+		},
+	}
+	client, err := NewWithOptions(WithORASClient(mockORAS))
 	require.NoError(t, err)
 
 	ctx := context.Background()
 
 	t.Run("empty source directory", func(t *testing.T) {
 		sourceDir := t.TempDir()
-		err = client.Push(ctx, sourceDir, "ghcr.io/test/repo:tag")
+		err = client.Push(ctx, sourceDir, "ghcr.io/test/repo:tag", WithMaxRetries(0), WithRetryDelay(0))
 		assert.Error(t, err)
-		// Should attempt to push (will fail due to auth) but not due to "not implemented"
+		// Should attempt to push (will fail due to mock) but not due to "not implemented"
 		assert.NotContains(t, err.Error(), "Push not yet implemented")
 		assert.Contains(t, err.Error(), "failed to push artifact")
 	})
@@ -243,7 +260,7 @@ func TestClient_Push_ErrorHandling(t *testing.T) {
 		err = os.WriteFile(filepath.Join(sourceDir, "test.txt"), []byte("content"), 0o644)
 		require.NoError(t, err)
 
-		err = client.Push(ctx, sourceDir, "invalid-reference")
+		err = client.Push(ctx, sourceDir, "invalid-reference", WithMaxRetries(0), WithRetryDelay(0))
 		assert.Error(t, err)
 		// Should fail at repository creation due to invalid reference format
 		assert.Contains(t, err.Error(), "invalid reference")
@@ -252,7 +269,12 @@ func TestClient_Push_ErrorHandling(t *testing.T) {
 
 // TestClient_Push_ProgressReporting tests progress callback functionality
 func TestClient_Push_ProgressReporting(t *testing.T) {
-	client, err := New()
+	mockORAS := &mocks.ClientMock{
+		PushFunc: func(ctx context.Context, reference string, descriptor *oras.PushDescriptor, opts *oras.AuthOptions) error {
+			return fmt.Errorf("simulated push error")
+		},
+	}
+	client, err := NewWithOptions(WithORASClient(mockORAS))
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -274,8 +296,15 @@ func TestClient_Push_ProgressReporting(t *testing.T) {
 		progressCalls = append(progressCalls, current)
 	}
 
-	// This should attempt to push (will fail due to auth)
-	err = client.Push(ctx, sourceDir, "ghcr.io/test/repo:tag", WithProgressCallback(progressCallback))
+	// This should attempt to push (mocked) and fail quickly
+	err = client.Push(
+		ctx,
+		sourceDir,
+		"ghcr.io/test/repo:tag",
+		WithProgressCallback(progressCallback),
+		WithMaxRetries(0),
+		WithRetryDelay(0),
+	)
 	assert.Error(t, err)
 	assert.NotContains(t, err.Error(), "Push not yet implemented")
 	assert.Contains(t, err.Error(), "failed to push artifact")
@@ -283,7 +312,12 @@ func TestClient_Push_ProgressReporting(t *testing.T) {
 
 // TestClient_Push_OptionsValidation tests that push options are properly handled
 func TestClient_Push_OptionsValidation(t *testing.T) {
-	client, err := New()
+	mockORAS := &mocks.ClientMock{
+		PushFunc: func(ctx context.Context, reference string, descriptor *oras.PushDescriptor, opts *oras.AuthOptions) error {
+			return fmt.Errorf("simulated push error")
+		},
+	}
+	client, err := NewWithOptions(WithORASClient(mockORAS))
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -295,7 +329,14 @@ func TestClient_Push_OptionsValidation(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("empty annotations", func(t *testing.T) {
-		err = client.Push(ctx, sourceDir, "ghcr.io/test/repo:tag", WithAnnotations(nil))
+		err = client.Push(
+			ctx,
+			sourceDir,
+			"ghcr.io/test/repo:tag",
+			WithAnnotations(nil),
+			WithMaxRetries(0),
+			WithRetryDelay(0),
+		)
 		assert.Error(t, err)
 		assert.NotContains(t, err.Error(), "Push not yet implemented")
 		assert.Contains(t, err.Error(), "failed to push artifact")
@@ -307,21 +348,35 @@ func TestClient_Push_OptionsValidation(t *testing.T) {
 
 		err = client.Push(ctx, sourceDir, "ghcr.io/test/repo:tag",
 			WithAnnotations(annotations1),
-			WithAnnotations(annotations2))
+			WithAnnotations(annotations2), WithMaxRetries(0), WithRetryDelay(0))
 		assert.Error(t, err)
 		assert.NotContains(t, err.Error(), "Push not yet implemented")
 		assert.Contains(t, err.Error(), "failed to push artifact")
 	})
 
 	t.Run("empty platform", func(t *testing.T) {
-		err = client.Push(ctx, sourceDir, "ghcr.io/test/repo:tag", WithPlatform(""))
+		err = client.Push(
+			ctx,
+			sourceDir,
+			"ghcr.io/test/repo:tag",
+			WithPlatform(""),
+			WithMaxRetries(0),
+			WithRetryDelay(0),
+		)
 		assert.Error(t, err)
 		assert.NotContains(t, err.Error(), "Push not yet implemented")
 		assert.Contains(t, err.Error(), "failed to push artifact")
 	})
 
 	t.Run("nil progress callback", func(t *testing.T) {
-		err = client.Push(ctx, sourceDir, "ghcr.io/test/repo:tag", WithProgressCallback(nil))
+		err = client.Push(
+			ctx,
+			sourceDir,
+			"ghcr.io/test/repo:tag",
+			WithProgressCallback(nil),
+			WithMaxRetries(0),
+			WithRetryDelay(0),
+		)
 		assert.Error(t, err)
 		assert.NotContains(t, err.Error(), "Push not yet implemented")
 		assert.Contains(t, err.Error(), "failed to push artifact")
@@ -742,4 +797,53 @@ func (m *mockReadCloserForTest) Read(p []byte) (n int, err error) {
 
 func (m *mockReadCloserForTest) Close() error {
 	return nil
+}
+
+func TestClient_WithMemFS_PushAndPull_WithMocks(t *testing.T) {
+	// Setup in-memory filesystem
+	mem := billyfs.NewInMemoryFS()
+
+	// Write a simple source tree into memfs
+	require.NoError(t, mem.MkdirAll("/src", 0o755))
+	require.NoError(t, mem.WriteFile("/src/hello.txt", []byte("hi"), 0o644))
+
+	// Mock ORAS to avoid network
+	mockORAS := &mocks.ClientMock{
+		PushFunc: func(ctx context.Context, reference string, descriptor *oras.PushDescriptor, opts *oras.AuthOptions) error {
+			// Consume all bytes to simulate upload
+			_, _ = io.Copy(io.Discard, descriptor.Data)
+			return nil
+		},
+		PullFunc: func(ctx context.Context, reference string, opts *oras.AuthOptions) (*oras.PullDescriptor, error) {
+			// Build a tiny tar.gz with a single file
+			var buf bytes.Buffer
+			gz := gzip.NewWriter(&buf)
+			tr := tar.NewWriter(gz)
+			require.NoError(t, tr.WriteHeader(&tar.Header{Name: "hello.txt", Mode: 0o644, Size: 2}))
+			_, _ = tr.Write([]byte("hi"))
+			require.NoError(t, tr.Close())
+			require.NoError(t, gz.Close())
+			return &oras.PullDescriptor{
+				MediaType: "application/vnd.oci.image.layer.v1.tar+gzip",
+				Data:      &mockReadCloserForTest{data: buf.Bytes()},
+				Size:      int64(buf.Len()),
+			}, nil
+		},
+	}
+
+	client, err := NewWithOptions(WithORASClient(mockORAS), WithFilesystem(mem))
+	require.NoError(t, err)
+
+	ctx := context.Background()
+
+	// Push using memfs source
+	require.NoError(t, client.Push(ctx, "/src", "example.com/repo:tag"))
+
+	// Pull using memfs target
+	require.NoError(t, client.Pull(ctx, "example.com/repo:tag", "/dst"))
+
+	// Verify file exists in memfs
+	b, err := mem.ReadFile("/dst/hello.txt")
+	require.NoError(t, err)
+	assert.Equal(t, []byte("hi"), b)
 }
