@@ -112,6 +112,14 @@ func (b *FS) Remove(name string) error {
 	return nil
 }
 
+// Rename implements Filesystem.Rename.
+func (b *FS) Rename(oldpath, newpath string) error {
+	if err := b.fs.Rename(oldpath, newpath); err != nil {
+		return fmt.Errorf("billy: rename %q -> %q: %w", oldpath, newpath, err)
+	}
+	return nil
+}
+
 // Stat implements Filesystem.Stat.
 func (b *FS) Stat(name string) (os.FileInfo, error) {
 	info, err := b.fs.Stat(name)

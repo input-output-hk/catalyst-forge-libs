@@ -16,6 +16,7 @@ type Filesystem interface {
 	ReadDir(dirname string) ([]os.FileInfo, error)
 	ReadFile(path string) ([]byte, error)
 	Remove(name string) error
+	Rename(oldpath, newpath string) error
 	Stat(name string) (os.FileInfo, error)
 	TempDir(dir, prefix string) (name string, err error)
 	Walk(root string, walkFn filepath.WalkFunc) error
