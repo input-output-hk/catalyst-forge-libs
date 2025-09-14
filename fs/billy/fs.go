@@ -146,6 +146,20 @@ func (b *FS) WriteFile(filename string, data []byte, perm os.FileMode) error {
 	return nil
 }
 
+// Symlink implements Filesystem.Symlink.
+func (b *FS) Symlink(oldname, newname string) error {
+	type symlinker interface {
+		Symlink(target, link string) error
+	}
+	if s, ok := b.fs.(symlinker); ok {
+		if err := s.Symlink(oldname, newname); err != nil {
+			return fmt.Errorf("billy: symlink %q -> %q: %w", newname, oldname, err)
+		}
+		return nil
+	}
+	return fmt.Errorf("billy: symlink not supported by underlying filesystem")
+}
+
 // Raw returns the underlying go-billy filesystem.
 //
 //nolint:ireturn // returning interface here is intentional to expose the adapter target.

@@ -20,4 +20,5 @@ type Filesystem interface {
 	TempDir(dir, prefix string) (name string, err error)
 	Walk(root string, walkFn filepath.WalkFunc) error
 	WriteFile(filename string, data []byte, perm os.FileMode) error
+	Symlink(oldname, newname string) error
 }

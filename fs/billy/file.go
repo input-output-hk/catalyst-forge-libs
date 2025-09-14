@@ -1,7 +1,9 @@
 package billy
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 
 	"github.com/go-git/go-billy/v5"
@@ -30,6 +32,9 @@ func (f *File) Name() string {
 func (f *File) Read(p []byte) (n int, err error) {
 	n, err = f.file.Read(p)
 	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return n, io.EOF
+		}
 		return n, fmt.Errorf("billy: read %q: %w", f.file.Name(), err)
 	}
 	return n, nil
@@ -39,6 +44,9 @@ func (f *File) Read(p []byte) (n int, err error) {
 func (f *File) ReadAt(p []byte, off int64) (n int, err error) {
 	n, err = f.file.ReadAt(p, off)
 	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return n, io.EOF
+		}
 		return n, fmt.Errorf("billy: readat %q off=%d: %w", f.file.Name(), off, err)
 	}
 	return n, nil
