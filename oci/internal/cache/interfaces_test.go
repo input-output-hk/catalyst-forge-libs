@@ -49,7 +49,10 @@ type MockManifestCache struct {
 	mock.Mock
 }
 
-func (m *MockManifestCache) GetManifest(ctx context.Context, digest string) (*ocispec.Manifest, error) {
+func (m *MockManifestCache) GetManifest(
+	ctx context.Context,
+	digest string,
+) (*ocispec.Manifest, error) {
 	args := m.Called(ctx, digest)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -57,7 +60,11 @@ func (m *MockManifestCache) GetManifest(ctx context.Context, digest string) (*oc
 	return args.Get(0).(*ocispec.Manifest), args.Error(1)
 }
 
-func (m *MockManifestCache) PutManifest(ctx context.Context, digest string, manifest *ocispec.Manifest) error {
+func (m *MockManifestCache) PutManifest(
+	ctx context.Context,
+	digest string,
+	manifest *ocispec.Manifest,
+) error {
 	args := m.Called(ctx, digest, manifest)
 	return args.Error(0)
 }
@@ -67,7 +74,10 @@ func (m *MockManifestCache) HasManifest(ctx context.Context, digest string) (boo
 	return args.Bool(0), args.Error(1)
 }
 
-func (m *MockManifestCache) ValidateManifest(ctx context.Context, reference, digest string) (bool, error) {
+func (m *MockManifestCache) ValidateManifest(
+	ctx context.Context,
+	reference, digest string,
+) (bool, error) {
 	args := m.Called(ctx, reference, digest)
 	return args.Bool(0), args.Error(1)
 }

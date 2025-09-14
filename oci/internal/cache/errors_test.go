@@ -115,7 +115,13 @@ func TestErrorUniqueness(t *testing.T) {
 	for i, err1 := range cacheErrors {
 		for j, err2 := range cacheErrors {
 			if i != j {
-				assert.False(t, errors.Is(err1, err2), "Error %v should not be equal to %v", err1, err2)
+				assert.False(
+					t,
+					errors.Is(err1, err2),
+					"Error %v should not be equal to %v",
+					err1,
+					err2,
+				)
 			}
 		}
 	}

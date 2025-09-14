@@ -132,6 +132,62 @@ func (m *Metrics) RemoveBytesStored(bytes int64) {
 	}
 }
 
+// TagMapping represents a mapping from a tag reference to a digest.
+// This enables efficient tag resolution with history tracking and TTL management.
+type TagMapping struct {
+	// Reference is the tag reference (e.g., "myregistry.com/myimage:latest")
+	Reference string `json:"reference"`
+	// Digest is the content digest this tag currently points to
+	Digest string `json:"digest"`
+	// CreatedAt is when this mapping was first created
+	CreatedAt time.Time `json:"created_at"`
+	// UpdatedAt is when this mapping was last updated
+	UpdatedAt time.Time `json:"updated_at"`
+	// AccessCount tracks how many times this mapping has been accessed
+	AccessCount int64 `json:"access_count"`
+	// History contains previous digests this tag has pointed to
+	History []TagHistoryEntry `json:"history,omitempty"`
+}
+
+// TagHistoryEntry represents a historical mapping of a tag to a digest.
+type TagHistoryEntry struct {
+	// Digest the tag previously pointed to
+	Digest string `json:"digest"`
+	// ChangedAt when this change occurred
+	ChangedAt time.Time `json:"changed_at"`
+}
+
+// TagResolverConfig contains configuration for tag resolution behavior.
+type TagResolverConfig struct {
+	// DefaultTTL is the default TTL for tag mappings
+	DefaultTTL time.Duration
+	// MaxHistorySize is the maximum number of historical entries to keep per tag
+	MaxHistorySize int
+	// EnableHistory enables tracking of tag history (defaults to true)
+	EnableHistory bool
+}
+
+// Validate checks that the tag resolver configuration is valid.
+func (c *TagResolverConfig) Validate() error {
+	if c.DefaultTTL <= 0 {
+		return fmt.Errorf("default TTL must be greater than 0")
+	}
+	if c.MaxHistorySize < 0 {
+		return fmt.Errorf("max history size cannot be negative")
+	}
+	return nil
+}
+
+// SetDefaults applies default values to unset fields in the tag resolver configuration.
+func (c *TagResolverConfig) SetDefaults() {
+	if c.MaxHistorySize == 0 {
+		c.MaxHistorySize = 10 // Default to keeping 10 historical entries
+	}
+	if !c.EnableHistory {
+		c.EnableHistory = true // Enable history by default
+	}
+}
+
 // Manager coordinates the overall cache system and manages multiple cache types.
 type Manager struct {
 	config    Config

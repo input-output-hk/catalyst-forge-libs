@@ -71,6 +71,31 @@ type BlobCache interface {
 	DeleteBlob(ctx context.Context, digest string) error
 }
 
+// TagCache defines operations for caching tag-to-digest mappings.
+// Tags are mutable references that can change frequently, requiring efficient
+// resolution with TTL-based caching and history tracking.
+type TagCache interface {
+	// GetTagMapping retrieves the current digest for a tag reference.
+	// Returns the tag mapping or an error if not found or expired.
+	GetTagMapping(ctx context.Context, reference string) (*TagMapping, error)
+
+	// PutTagMapping stores or updates a tag-to-digest mapping.
+	// Creates history entries when updating existing mappings.
+	PutTagMapping(ctx context.Context, reference, digest string) error
+
+	// HasTagMapping checks if a tag mapping exists and is not expired.
+	// This is more efficient than GetTagMapping when only existence matters.
+	HasTagMapping(ctx context.Context, reference string) (bool, error)
+
+	// DeleteTagMapping removes a tag mapping from the cache.
+	// Returns nil if the mapping doesn't exist (idempotent operation).
+	DeleteTagMapping(ctx context.Context, reference string) error
+
+	// GetTagHistory retrieves the history of digests for a tag reference.
+	// Returns a slice of historical entries in chronological order (oldest first).
+	GetTagHistory(ctx context.Context, reference string) ([]TagHistoryEntry, error)
+}
+
 // EvictionStrategy defines how entries are selected for eviction when cache size limits are reached.
 // Implementations should be deterministic and thread-safe.
 type EvictionStrategy interface {

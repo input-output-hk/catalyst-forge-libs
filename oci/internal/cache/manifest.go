@@ -37,7 +37,10 @@ func NewManifestCache(storage *Storage, manager *Manager) *manifestCache {
 
 // GetManifest retrieves a manifest by its digest.
 // Returns the manifest or an error if not found or expired.
-func (mc *manifestCache) GetManifest(ctx context.Context, digest string) (*ocispec.Manifest, error) {
+func (mc *manifestCache) GetManifest(
+	ctx context.Context,
+	digest string,
+) (*ocispec.Manifest, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("context cancelled: %w", err)
 	}
@@ -70,7 +73,11 @@ func (mc *manifestCache) GetManifest(ctx context.Context, digest string) (*ocisp
 
 // PutManifest stores a manifest with the given digest.
 // Validates the manifest before storage and handles TTL management.
-func (mc *manifestCache) PutManifest(ctx context.Context, digest string, manifest *ocispec.Manifest) error {
+func (mc *manifestCache) PutManifest(
+	ctx context.Context,
+	digest string,
+	manifest *ocispec.Manifest,
+) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("context cancelled: %w", err)
 	}
@@ -138,7 +145,10 @@ func (mc *manifestCache) HasManifest(ctx context.Context, digest string) (bool, 
 // ValidateManifest performs validation of a manifest against a reference.
 // This implementation does basic validation and could be extended with
 // registry HEAD requests for more thorough validation.
-func (mc *manifestCache) ValidateManifest(ctx context.Context, reference, digest string) (bool, error) {
+func (mc *manifestCache) ValidateManifest(
+	ctx context.Context,
+	reference, digest string,
+) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, fmt.Errorf("context cancelled: %w", err)
 	}
@@ -211,7 +221,10 @@ func (mc *manifestCache) manifestPath(digest string) string {
 }
 
 // readManifestEntry reads a manifest entry from storage.
-func (mc *manifestCache) readManifestEntry(ctx context.Context, digest string) (*manifestCacheEntry, error) {
+func (mc *manifestCache) readManifestEntry(
+	ctx context.Context,
+	digest string,
+) (*manifestCacheEntry, error) {
 	path := mc.manifestPath(digest)
 	data, err := mc.storage.ReadWithIntegrity(ctx, path)
 	if err != nil {
@@ -227,7 +240,11 @@ func (mc *manifestCache) readManifestEntry(ctx context.Context, digest string) (
 }
 
 // writeManifestEntry writes a manifest entry to storage.
-func (mc *manifestCache) writeManifestEntry(ctx context.Context, digest string, entry *manifestCacheEntry) error {
+func (mc *manifestCache) writeManifestEntry(
+	ctx context.Context,
+	digest string,
+	entry *manifestCacheEntry,
+) error {
 	data, err := json.Marshal(entry)
 	if err != nil {
 		return fmt.Errorf("failed to marshal manifest entry: %w", err)

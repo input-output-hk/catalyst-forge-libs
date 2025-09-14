@@ -108,8 +108,10 @@ func TestManifestCacheConcurrentAccess(t *testing.T) {
 					MediaType: ocispec.MediaTypeImageManifest,
 					Config: ocispec.Descriptor{
 						MediaType: "application/vnd.oci.image.config.v1+json",
-						Digest:    digest.FromString(fmt.Sprintf("sha256:%064x", (id+1)*numOperations+j)),
-						Size:      int64(1234),
+						Digest: digest.FromString(
+							fmt.Sprintf("sha256:%064x", (id+1)*numOperations+j),
+						),
+						Size: int64(1234),
 					},
 				}
 
@@ -283,8 +285,10 @@ func TestManifestCacheBasicOperations(t *testing.T) {
 			MediaType: ocispec.MediaTypeImageManifest,
 			Config: ocispec.Descriptor{
 				MediaType: "application/vnd.oci.image.config.v1+json",
-				Digest:    digest.FromString("sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"),
-				Size:      int64(1234),
+				Digest: digest.FromString(
+					"sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+				),
+				Size: int64(1234),
 			},
 			Layers: []ocispec.Descriptor{
 				{
@@ -320,8 +324,10 @@ func TestManifestCacheBasicOperations(t *testing.T) {
 			MediaType: ocispec.MediaTypeImageManifest,
 			Config: ocispec.Descriptor{
 				MediaType: "application/vnd.oci.image.config.v1+json",
-				Digest:    digest.FromString("sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"),
-				Size:      1234,
+				Digest: digest.FromString(
+					"sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+				),
+				Size: 1234,
 			},
 		}
 
