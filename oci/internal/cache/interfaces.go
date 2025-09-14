@@ -3,6 +3,8 @@ package cache
 import (
 	"context"
 	"io"
+
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 // Cache defines the core interface for cache operations.
@@ -34,11 +36,11 @@ type Cache interface {
 type ManifestCache interface {
 	// GetManifest retrieves a manifest by its digest.
 	// Returns the manifest content or an error if not found.
-	GetManifest(ctx context.Context, digest string) ([]byte, error)
+	GetManifest(ctx context.Context, digest string) (*ocispec.Manifest, error)
 
 	// PutManifest stores a manifest with the given digest.
 	// The digest should be validated before storage.
-	PutManifest(ctx context.Context, digest string, manifest []byte) error
+	PutManifest(ctx context.Context, digest string, manifest *ocispec.Manifest) error
 
 	// HasManifest checks if a manifest exists in the cache.
 	// This is more efficient than GetManifest when only existence matters.

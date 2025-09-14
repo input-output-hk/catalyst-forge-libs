@@ -5,6 +5,8 @@ import (
 	"io"
 	"testing"
 
+	"github.com/opencontainers/image-spec/specs-go"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -47,15 +49,15 @@ type MockManifestCache struct {
 	mock.Mock
 }
 
-func (m *MockManifestCache) GetManifest(ctx context.Context, digest string) ([]byte, error) {
+func (m *MockManifestCache) GetManifest(ctx context.Context, digest string) (*ocispec.Manifest, error) {
 	args := m.Called(ctx, digest)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]byte), args.Error(1)
+	return args.Get(0).(*ocispec.Manifest), args.Error(1)
 }
 
-func (m *MockManifestCache) PutManifest(ctx context.Context, digest string, manifest []byte) error {
+func (m *MockManifestCache) PutManifest(ctx context.Context, digest string, manifest *ocispec.Manifest) error {
 	args := m.Called(ctx, digest, manifest)
 	return args.Error(0)
 }
@@ -182,7 +184,10 @@ func TestMockUsage(t *testing.T) {
 		mockManifest := &MockManifestCache{}
 		defer mockManifest.AssertExpectations(t)
 
-		manifest := []byte("manifest content")
+		manifest := &ocispec.Manifest{
+			Versioned: specs.Versioned{SchemaVersion: 2},
+			MediaType: ocispec.MediaTypeImageManifest,
+		}
 		mockManifest.On("GetManifest", ctx, "sha256:abc").Return(manifest, nil)
 		mockManifest.On("PutManifest", ctx, "sha256:abc", manifest).Return(nil)
 		mockManifest.On("HasManifest", ctx, "sha256:abc").Return(true, nil)
