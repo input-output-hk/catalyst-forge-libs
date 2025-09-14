@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	billyfs "github.com/input-output-hk/catalyst-forge-libs/fs/billy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -513,6 +514,33 @@ func TestTarGzArchiver_SecurityLimits(t *testing.T) {
 	err = archiver.Extract(context.Background(), &buf, targetDir, opts)
 	assert.Error(t, err, "Should fail due to size limits")
 	assert.Contains(t, err.Error(), "security", "Error should be security-related")
+}
+
+// TestTarGzArchiver_MemFS_RoundTrip tests archive/extract using an in-memory filesystem
+func TestTarGzArchiver_MemFS_RoundTrip(t *testing.T) {
+	tempFS := billyfs.NewInMemoryFS()
+
+	// Build source tree in memfs
+	require.NoError(t, tempFS.MkdirAll("/src/sub", 0o755))
+	require.NoError(t, tempFS.WriteFile("/src/a.txt", []byte("A"), 0o644))
+	require.NoError(t, tempFS.WriteFile("/src/sub/b.txt", []byte("B"), 0o644))
+
+	archiver := NewTarGzArchiverWithFS(tempFS)
+	var buf bytes.Buffer
+
+	require.NoError(t, archiver.Archive(context.Background(), "/src", &buf))
+	assert.Greater(t, buf.Len(), 0)
+
+	// Extract into target directory within the same memfs
+	require.NoError(t, archiver.Extract(context.Background(), &buf, "/dst", DefaultExtractOptions))
+
+	ab, err := tempFS.ReadFile("/dst/a.txt")
+	require.NoError(t, err)
+	assert.Equal(t, "A", string(ab))
+
+	bb, err := tempFS.ReadFile("/dst/sub/b.txt")
+	require.NoError(t, err)
+	assert.Equal(t, "B", string(bb))
 }
 
 // mockArchiver implements Archiver interface for testing

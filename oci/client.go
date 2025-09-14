@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	billyfs "github.com/input-output-hk/catalyst-forge-libs/fs/billy"
 	"oras.land/oras-go/v2/registry/remote"
 
 	"github.com/input-output-hk/catalyst-forge-libs/oci/internal/oras"
@@ -55,6 +56,11 @@ func NewWithOptions(opts ...ClientOption) (*Client, error) {
 	// Apply functional options
 	for _, opt := range opts {
 		opt(options)
+	}
+
+	// Ensure filesystem default
+	if options.FS == nil {
+		options.FS = billyfs.NewBaseOSFS()
 	}
 
 	// Use provided ORAS client or default to real implementation
@@ -228,81 +234,70 @@ func (c *Client) Push(ctx context.Context, sourceDir, reference string, opts ...
 	}
 
 	// Check if source directory exists and is readable
-	if _, err := os.Stat(sourceDir); os.IsNotExist(err) {
+	if exists, exErr := c.options.FS.Exists(sourceDir); exErr != nil {
+		return fmt.Errorf("failed to check source directory: %w", exErr)
+	} else if !exists {
 		return fmt.Errorf("source directory does not exist: %s", sourceDir)
 	}
 
 	// Create authenticated repository (needed for future authentication validation)
-	_, err := c.createRepository(ctx, reference)
-	if err != nil {
-		return err
+	_, repoErr := c.createRepository(ctx, reference)
+	if repoErr != nil {
+		return repoErr
 	}
 
-	// Create temporary file for the archive
-	tempFile, err := os.CreateTemp("", "ocibundle-push-*.tar.gz")
-	if err != nil {
-		return fmt.Errorf("failed to create temporary file: %w", err)
+	// Create temporary directory and file for the archive within our filesystem
+	tempDir, tmpErr := c.options.FS.TempDir("", "ocibundle-push-")
+	if tmpErr != nil {
+		return fmt.Errorf("failed to create temporary directory: %w", tmpErr)
 	}
-	tempFilePath := tempFile.Name()
-
-	// Ensure cleanup happens in all error paths
+	tempFilePath := filepath.Join(tempDir, "bundle.tar.gz")
+	tempFile, openErr := c.options.FS.OpenFile(tempFilePath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0o600)
+	if openErr != nil {
+		return fmt.Errorf("failed to create temporary file: %w", openErr)
+	}
 	cleanupNeeded := true
 	defer func() {
+		_ = tempFile.Close()
 		if cleanupNeeded {
-			tempFile.Close()
-			os.Remove(tempFilePath)
+			_ = c.options.FS.Remove(tempFilePath)
 		}
 	}()
 
 	// Create archiver
-	archiver := NewTarGzArchiver()
+	archiver := NewTarGzArchiverWithFS(c.options.FS)
 
 	// Archive the source directory (with progress if callback provided)
+	var archiveErr error
 	if pushOpts.ProgressCallback != nil {
-		err = archiver.ArchiveWithProgress(ctx, sourceDir, tempFile, pushOpts.ProgressCallback)
+		archiveErr = archiver.ArchiveWithProgress(ctx, sourceDir, tempFile, pushOpts.ProgressCallback)
 	} else {
-		err = archiver.Archive(ctx, sourceDir, tempFile)
+		archiveErr = archiver.Archive(ctx, sourceDir, tempFile)
 	}
-	if err != nil {
-		return fmt.Errorf("failed to archive directory: %w", err)
+	if archiveErr != nil {
+		return fmt.Errorf("failed to archive directory: %w", archiveErr)
 	}
-
-	// Close the file so we can read it for pushing
-	if closeErr := tempFile.Close(); closeErr != nil {
-		return fmt.Errorf("failed to close temporary file: %w", closeErr)
-	}
-
-	// Reopen for reading
-	tempFile, err = os.Open(tempFilePath)
-	if err != nil {
-		return fmt.Errorf("failed to reopen temporary file: %w", err)
-	}
-
-	// Update cleanup to only close the file (don't remove yet since we're using it)
-	defer func() {
-		tempFile.Close()
-		if cleanupNeeded {
-			os.Remove(tempFilePath)
-		}
-	}()
 
 	// Get file size
-	stat, err := tempFile.Stat()
-	if err != nil {
-		return fmt.Errorf("failed to get file size: %w", err)
-	}
-
-	// Create push descriptor with options
-	desc := &oras.PushDescriptor{
-		MediaType:   archiver.MediaType(),
-		Data:        tempFile,
-		Size:        stat.Size(),
-		Annotations: pushOpts.Annotations,
-		Platform:    pushOpts.Platform,
+	stat, statErr := tempFile.Stat()
+	if statErr != nil {
+		return fmt.Errorf("failed to get file size: %w", statErr)
 	}
 
 	// Push the artifact with retry logic
 	pushErr := retryOperation(ctx, pushOpts.MaxRetries, pushOpts.RetryDelay, func() error {
+		// Rewind before each attempt
+		if _, seekErr := tempFile.Seek(0, io.SeekStart); seekErr != nil {
+			return fmt.Errorf("failed to seek temporary file: %w", seekErr)
+		}
+		// Recreate descriptor to ensure fresh reader for each attempt
+		desc := &oras.PushDescriptor{
+			MediaType:   archiver.MediaType(),
+			Data:        tempFile,
+			Size:        stat.Size(),
+			Annotations: pushOpts.Annotations,
+			Platform:    pushOpts.Platform,
+		}
 		return c.orasClient.Push(ctx, reference, desc, c.options.Auth)
 	})
 	if pushErr != nil {
@@ -346,23 +341,23 @@ func (c *Client) Pull(ctx context.Context, reference, targetDir string, opts ...
 	}
 
 	// Check if target directory exists and is empty (for atomic extraction)
-	if _, statErr := os.Stat(targetDir); statErr == nil {
+	if exists, exErr := c.options.FS.Exists(targetDir); exErr != nil {
+		return fmt.Errorf("failed to check target directory: %w", exErr)
+	} else if exists {
 		// Directory exists, check if it's empty
-		entries, readErr := os.ReadDir(targetDir)
+		entries, readErr := c.options.FS.ReadDir(targetDir)
 		if readErr != nil {
 			return fmt.Errorf("failed to read target directory: %w", readErr)
 		}
 		if len(entries) > 0 {
 			return fmt.Errorf("target directory is not empty: %s", targetDir)
 		}
-	} else if !os.IsNotExist(statErr) {
-		return fmt.Errorf("failed to check target directory: %w", statErr)
 	}
 
 	// Create authenticated repository (needed for future authentication validation)
-	_, err := c.createRepository(ctx, reference)
-	if err != nil {
-		return err
+	_, repoErr := c.createRepository(ctx, reference)
+	if repoErr != nil {
+		return repoErr
 	}
 
 	// Pull the artifact with retry logic
@@ -383,7 +378,7 @@ func (c *Client) Pull(ctx context.Context, reference, targetDir string, opts ...
 	defer descriptor.Data.Close()
 
 	// Create archiver
-	archiver := NewTarGzArchiver()
+	archiver := NewTarGzArchiverWithFS(c.options.FS)
 
 	// Create extract options from pull options
 	extractOpts := ExtractOptions{
@@ -411,11 +406,11 @@ func (c *Client) extractAtomically(
 	opts ExtractOptions,
 ) error {
 	// Create a temporary directory for extraction
-	tempDir, err := os.MkdirTemp("", "ocibundle-pull-")
-	if err != nil {
-		return fmt.Errorf("failed to create temporary directory: %w", err)
+	tempDir, tmpErr := c.options.FS.TempDir("", "ocibundle-pull-")
+	if tmpErr != nil {
+		return fmt.Errorf("failed to create temporary directory: %w", tmpErr)
 	}
-	defer os.RemoveAll(tempDir) // Clean up temp directory
+	defer func() { _ = c.removeAllFS(tempDir) }()
 
 	// Extract to temporary directory first
 	if err := archiver.Extract(ctx, data, tempDir, opts); err != nil {
@@ -423,14 +418,14 @@ func (c *Client) extractAtomically(
 	}
 
 	// Ensure target directory exists
-	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+	if err := c.options.FS.MkdirAll(targetDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create target directory: %w", err)
 	}
 
 	// Move extracted files from temp directory to target directory
 	if err := c.moveFiles(tempDir, targetDir); err != nil {
 		// Clean up any partially moved files
-		os.RemoveAll(targetDir)
+		_ = c.removeAllFS(targetDir)
 		return fmt.Errorf("failed to move extracted files: %w", err)
 	}
 
@@ -439,9 +434,9 @@ func (c *Client) extractAtomically(
 
 // moveFiles moves all files from srcDir to dstDir
 func (c *Client) moveFiles(srcDir, dstDir string) error {
-	if err := filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return fmt.Errorf("failed to walk path %s: %w", path, err)
+	if err := c.options.FS.Walk(srcDir, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return fmt.Errorf("failed to walk path %s: %w", path, walkErr)
 		}
 
 		// Skip the root directory
@@ -450,9 +445,9 @@ func (c *Client) moveFiles(srcDir, dstDir string) error {
 		}
 
 		// Calculate relative path from source
-		relPath, err := filepath.Rel(srcDir, path)
-		if err != nil {
-			return fmt.Errorf("failed to get relative path from %s to %s: %w", srcDir, path, err)
+		relPath, relErr := filepath.Rel(srcDir, path)
+		if relErr != nil {
+			return fmt.Errorf("failed to get relative path from %s to %s: %w", srcDir, path, relErr)
 		}
 
 		// Calculate destination path
@@ -460,22 +455,36 @@ func (c *Client) moveFiles(srcDir, dstDir string) error {
 
 		if info.IsDir() {
 			// Create directory
-			if err := os.MkdirAll(dstPath, info.Mode()); err != nil {
-				return fmt.Errorf("failed to create directory %s: %w", dstPath, err)
+			if mkErr := c.options.FS.MkdirAll(dstPath, info.Mode()); mkErr != nil {
+				return fmt.Errorf("failed to create directory %s: %w", dstPath, mkErr)
 			}
 			return nil
 		}
-		// Move file
-		if err := os.Rename(path, dstPath); err != nil {
-			return fmt.Errorf("failed to move file from %s to %s: %w", path, dstPath, err)
-		}
-		// Restore original permissions
-		if err := os.Chmod(dstPath, info.Mode()); err != nil {
-			return fmt.Errorf("failed to set permissions on %s: %w", dstPath, err)
+
+		if err := c.options.FS.Rename(path, dstPath); err != nil {
+			return fmt.Errorf("failed to rename %s to %s: %w", path, dstPath, err)
 		}
 		return nil
 	}); err != nil {
-		return fmt.Errorf("failed to walk directory %s: %w", srcDir, err)
+		return fmt.Errorf("move files: %w", err)
+	}
+	return nil
+}
+
+// removeAllFS removes a directory tree using the filesystem (best-effort).
+func (c *Client) removeAllFS(root string) error {
+	// Simple recursive delete using Walk in reverse order: files before dirs.
+	var toDelete []string
+	_ = c.options.FS.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		toDelete = append(toDelete, path)
+		return nil
+	})
+	// delete deepest paths first
+	for i := len(toDelete) - 1; i >= 0; i-- {
+		_ = c.options.FS.Remove(toDelete[i])
 	}
 	return nil
 }

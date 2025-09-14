@@ -13,6 +13,9 @@ import (
 	"path/filepath"
 	"sync"
 
+	fsapi "github.com/input-output-hk/catalyst-forge-libs/fs"
+	billyfs "github.com/input-output-hk/catalyst-forge-libs/fs/billy"
+
 	validatepkg "github.com/input-output-hk/catalyst-forge-libs/oci/internal/validate"
 )
 
@@ -20,13 +23,15 @@ import (
 // It provides secure, streaming archive and extraction operations with
 // comprehensive validation and progress reporting capabilities.
 // Uses concurrent processing for improved performance on multi-core systems.
-type TarGzArchiver struct{}
+type TarGzArchiver struct {
+	fs fsapi.Filesystem
+}
 
 // NewTarGzArchiver creates a new TarGzArchiver instance.
 // The archiver uses standard tar.gz format compatible with common tools
 // and implements security validation during extraction.
 func NewTarGzArchiver() *TarGzArchiver {
-	return &TarGzArchiver{}
+	return &TarGzArchiver{fs: billyfs.NewBaseOSFS()}
 }
 
 // Archive creates a tar.gz archive from the specified source directory.
@@ -71,14 +76,14 @@ func (a *TarGzArchiver) ArchiveWithProgress(
 		return fmt.Errorf("output writer cannot be nil")
 	}
 
-	if _, err := os.Stat(sourceDir); os.IsNotExist(err) {
+	if _, err := a.fs.Stat(sourceDir); os.IsNotExist(err) {
 		return fmt.Errorf("source directory does not exist: %s", sourceDir)
 	}
 
 	// If progress callback is provided, calculate total size first
 	var totalSize int64
 	if progress != nil {
-		er := filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
+		er := a.fs.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
@@ -116,7 +121,7 @@ func (a *TarGzArchiver) archiveWithConcurrency(
 	progress func(current, total int64),
 ) error {
 	// Collect all file paths first
-	fileInfos, err := collectFileInfos(sourceDir)
+	fileInfos, err := collectFileInfos(a.fs, sourceDir)
 	if err != nil {
 		return err
 	}
@@ -193,7 +198,7 @@ func (a *TarGzArchiver) worker(ctx context.Context, jobs <-chan fileInfoEntry, r
 
 		var content io.ReadCloser
 		if job.info.Mode().IsRegular() {
-			file, err := os.Open(job.path)
+			file, err := a.fs.Open(job.path)
 			if err != nil {
 				results <- archiveResult{relPath: job.relPath, err: fmt.Errorf("failed to open file %s: %w", job.path, err)}
 				continue
@@ -273,7 +278,7 @@ func (a *TarGzArchiver) Extract(ctx context.Context, input io.Reader, targetDir 
 
 	tarReader := tar.NewReader(gzipReader)
 
-	if mkErr := os.MkdirAll(targetDir, 0o755); mkErr != nil {
+	if mkErr := a.fs.MkdirAll(targetDir, 0o755); mkErr != nil {
 		return fmt.Errorf("failed to create target directory: %w", mkErr)
 	}
 
@@ -305,7 +310,7 @@ func (a *TarGzArchiver) Extract(ctx context.Context, input io.Reader, targetDir 
 			return fmt.Errorf("failed to read tar header: %w", nextErr)
 		}
 
-		if err := handleHeader(ctx, tarReader, header, targetDir, rootAbs, opts, validators, pv, &totalSize, &fileCount); err != nil {
+		if err := handleHeader(ctx, tarReader, header, targetDir, rootAbs, opts, validators, pv, &totalSize, &fileCount, a.fs); err != nil {
 			return err
 		}
 	}

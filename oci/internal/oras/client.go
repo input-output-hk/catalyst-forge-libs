@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/registry/remote"
@@ -165,9 +166,6 @@ func NewRepository(ctx context.Context, reference string, opts *AuthOptions) (*r
 	return repo, nil
 }
 
-// shouldApplyHTTPConfig determines if HTTP configuration should be applied to a registry.
-// It checks if the registry matches any of the configured registries or if no specific
-// registries are configured (applies to all).
 func shouldApplyHTTPConfig(reference string, config *HTTPConfig) bool {
 	// If no specific registries are configured, apply to all
 	if len(config.Registries) == 0 {
@@ -214,33 +212,67 @@ type PushDescriptor struct {
 	Platform    string
 }
 
+// pushStreamIfPossible attempts to stream-push the data when it is seekable.
+// Returns handled=true when streaming was performed (with success or error to propagate).
+// Returns handled=false to indicate the caller should fall back to buffered logic.
+func pushStreamIfPossible(
+	ctx context.Context,
+	repo *remote.Repository,
+	reference, refPart string,
+	descriptor *PushDescriptor,
+) (handled bool, err error) {
+	rs, ok := descriptor.Data.(io.ReadSeeker)
+	if !ok {
+		return false, nil
+	}
+
+	// Determine size by seeking to end and back
+	sz, szErr := rs.Seek(0, io.SeekEnd)
+	if szErr != nil || sz < 0 {
+		return false, nil
+	}
+	if _, back := rs.Seek(0, io.SeekStart); back != nil {
+		return false, nil
+	}
+
+	// Compute digest by reading the stream (then rewind)
+	d, dErr := digest.FromReader(rs)
+	if dErr != nil {
+		return false, nil
+	}
+	if _, back2 := rs.Seek(0, io.SeekStart); back2 != nil {
+		return false, nil
+	}
+
+	expected := ocispec.Descriptor{
+		MediaType: descriptor.MediaType,
+		Digest:    d,
+		Size:      sz,
+	}
+
+	// Push blob streaming from file. On push error, fall back to buffered.
+	if pErr := repo.Blobs().Push(ctx, expected, io.LimitReader(rs, sz)); pErr != nil {
+		return false, nil
+	}
+
+	// Pack manifest and tag
+	packOpts := oras.PackManifestOptions{Layers: []ocispec.Descriptor{expected}}
+	artifactType := "application/vnd.catalyst.bundle.v1"
+	manDesc, mErr := oras.PackManifest(ctx, repo, oras.PackManifestVersion1_1, artifactType, packOpts)
+	if mErr != nil {
+		return true, mapORASError("push", reference, fmt.Errorf("pack manifest v1.1: %w", mErr))
+	}
+	if _, tErr := oras.Tag(ctx, repo, manDesc.Digest.String(), refPart); tErr != nil {
+		return true, mapORASError("push", reference, fmt.Errorf("tag manifest: %w", tErr))
+	}
+	return true, nil
+}
+
 // Push pushes an artifact to an OCI registry using ORAS.
-// It pushes the content directly using ORAS TagBytes function.
-//
-// Parameters:
-//   - ctx: Context for the operation
-//   - reference: Full OCI reference (e.g., "ghcr.io/org/repo:tag")
-//   - descriptor: Description of the content to push
-//   - opts: Authentication options (can be nil for default behavior)
-//
-// Returns an error if the push operation fails.
-//
-// NOTE: Current implementation loads entire content into memory for digest calculation.
-// TODO: Optimize for streaming to maintain constant memory usage for large files.
+// Streaming from io.ReadSeeker when possible; falls back to buffered.
 func Push(ctx context.Context, reference string, descriptor *PushDescriptor, opts *AuthOptions) error {
 	if descriptor == nil {
 		return fmt.Errorf("descriptor cannot be nil")
-	}
-
-	// Read the data to get the actual content
-	data, err := io.ReadAll(descriptor.Data)
-	if err != nil {
-		return mapORASError("push", reference, fmt.Errorf("failed to read data: %w", err))
-	}
-
-	// Ensure we have content to push
-	if len(data) == 0 {
-		return mapORASError("push", reference, fmt.Errorf("no data to push"))
 	}
 
 	// Create the repository with authentication
@@ -255,24 +287,37 @@ func Push(ctx context.Context, reference string, descriptor *PushDescriptor, opt
 		return mapORASError("push", reference, fmt.Errorf("reference must include a tag or digest"))
 	}
 
+	// Try streaming path first
+	if handled, sErr := pushStreamIfPossible(ctx, repo, reference, refPart, descriptor); handled {
+		return sErr
+	}
+
+	// Buffered fallback: read entire data into memory
+	data, rErr := io.ReadAll(descriptor.Data)
+	if rErr != nil {
+		return mapORASError("push", reference, fmt.Errorf("failed to read data: %w", rErr))
+	}
+	if len(data) == 0 {
+		return mapORASError("push", reference, fmt.Errorf("no data to push"))
+	}
+
 	// 1) Push the content blob
-	blobDesc, err := oras.PushBytes(ctx, repo, descriptor.MediaType, data)
-	if err != nil {
-		return mapORASError("push", reference, fmt.Errorf("push blob: %w", err))
+	blobDesc, bErr := oras.PushBytes(ctx, repo, descriptor.MediaType, data)
+	if bErr != nil {
+		return mapORASError("push", reference, fmt.Errorf("push blob: %w", bErr))
 	}
 
 	// 2) Pack an OCI 1.1 manifest with artifactType and empty config
 	packOpts := oras.PackManifestOptions{Layers: []ocispec.Descriptor{blobDesc}}
 	artifactType := "application/vnd.catalyst.bundle.v1"
-	manDesc, err := oras.PackManifest(ctx, repo, oras.PackManifestVersion1_1, artifactType, packOpts)
-	if err != nil {
-		return mapORASError("push", reference, fmt.Errorf("pack manifest v1.1: %w", err))
+	manDesc, pErr := oras.PackManifest(ctx, repo, oras.PackManifestVersion1_1, artifactType, packOpts)
+	if pErr != nil {
+		return mapORASError("push", reference, fmt.Errorf("pack manifest v1.1: %w", pErr))
 	}
 
 	// 3) Tag the manifest with the requested ref
-	_, err = oras.Tag(ctx, repo, manDesc.Digest.String(), refPart)
-	if err != nil {
-		return mapORASError("push", reference, fmt.Errorf("tag manifest: %w", err))
+	if _, tErr := oras.Tag(ctx, repo, manDesc.Digest.String(), refPart); tErr != nil {
+		return mapORASError("push", reference, fmt.Errorf("tag manifest: %w", tErr))
 	}
 
 	return nil

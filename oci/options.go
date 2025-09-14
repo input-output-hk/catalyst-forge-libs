@@ -6,6 +6,7 @@ import (
 	"context"
 	"time"
 
+	fsapi "github.com/input-output-hk/catalyst-forge-libs/fs"
 	"oras.land/oras-go/v2/registry/remote/auth"
 
 	"github.com/input-output-hk/catalyst-forge-libs/oci/internal/oras"
@@ -22,6 +23,10 @@ type ClientOptions struct {
 
 	// HTTPConfig controls HTTP vs HTTPS and certificate validation
 	HTTPConfig *HTTPConfig
+
+	// FS provides filesystem operations for archive/temp/extraction handling.
+	// If nil, a default OS-backed filesystem will be used.
+	FS fsapi.Filesystem
 }
 
 // HTTPConfig contains configuration for HTTP transport settings.
@@ -339,5 +344,13 @@ func DefaultClientOptions() *ClientOptions {
 	return &ClientOptions{
 		Auth:       nil, // Use default Docker credential chain
 		HTTPConfig: nil, // Use default HTTPS with certificate validation
+		FS:         nil, // Filled by constructor if unset
+	}
+}
+
+// WithFilesystem injects a custom filesystem implementation used by the client.
+func WithFilesystem(fsys fsapi.Filesystem) ClientOption {
+	return func(opts *ClientOptions) {
+		opts.FS = fsys
 	}
 }
