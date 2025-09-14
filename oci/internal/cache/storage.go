@@ -104,7 +104,8 @@ func (s *Storage) WriteAtomically(ctx context.Context, path string, data []byte)
 	}()
 
 	// Write data to temp file
-	if err := s.writeWithChecksum(tempFile, data); err != nil {
+	err = s.writeWithChecksum(tempFile, data)
+	if err != nil {
 		return fmt.Errorf("failed to write temp file: %w", err)
 	}
 
