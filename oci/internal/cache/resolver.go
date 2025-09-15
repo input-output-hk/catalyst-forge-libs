@@ -8,6 +8,11 @@ import (
 	"time"
 )
 
+const (
+	// testReference is a well-known reference used for health checks and testing
+	testReference = "docker.io/library/nginx:latest"
+)
+
 // TagResolver provides efficient tag resolution with multi-tier validation.
 // It implements caching, HEAD request optimization, and tag movement detection.
 type TagResolver struct {
@@ -378,7 +383,7 @@ func (tr *TagResolver) BatchResolveTags(
 // Returns an error if the resolver is not functioning properly.
 func (tr *TagResolver) HealthCheck(ctx context.Context) error {
 	// Try to resolve a well-known tag (Docker Hub nginx:latest)
-	testRef := "docker.io/library/nginx:latest"
+	testRef := testReference
 
 	_, err := tr.ResolveTag(ctx, testRef)
 	if err != nil {

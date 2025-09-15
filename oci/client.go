@@ -503,31 +503,6 @@ func (c *Client) isCachingEnabledForPull(opts *PullOptions) bool {
 	}
 }
 
-// isCachingEnabledForPush determines if caching should be used for this push operation
-func (c *Client) isCachingEnabledForPush(opts *PushOptions) bool {
-	// Check if cache bypass is requested
-	if opts.CacheBypass {
-		return false
-	}
-
-	// Check if cache is configured
-	if c.options.CacheConfig == nil || c.options.CacheConfig.Coordinator == nil {
-		return false
-	}
-
-	// Check cache policy
-	switch c.options.CacheConfig.Policy {
-	case CachePolicyDisabled:
-		return false
-	case CachePolicyPush, CachePolicyEnabled:
-		return true
-	case CachePolicyPull:
-		return false
-	default:
-		return false
-	}
-}
-
 // ensureCacheInitialized ensures the cache is properly initialized
 func (c *Client) ensureCacheInitialized(ctx context.Context) error {
 	if c.cache != nil {
