@@ -96,6 +96,11 @@ type TagCache interface {
 	GetTagHistory(ctx context.Context, reference string) ([]TagHistoryEntry, error)
 }
 
+// ConfigProvider defines the interface that cache components need from a manager.
+type ConfigProvider interface {
+	Config() Config
+}
+
 // EvictionStrategy defines how entries are selected for eviction when cache size limits are reached.
 // Implementations should be deterministic and thread-safe.
 type EvictionStrategy interface {

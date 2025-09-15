@@ -22,13 +22,13 @@ type manifestCacheEntry struct {
 // represent mutable references that can change frequently.
 type manifestCache struct {
 	storage *Storage
-	manager *Manager
+	manager ConfigProvider
 }
 
 // NewManifestCache creates a new manifest cache instance.
 //
 //nolint:revive // Returns unexported type for encapsulation, consistent with codebase patterns
-func NewManifestCache(storage *Storage, manager *Manager) *manifestCache {
+func NewManifestCache(storage *Storage, manager ConfigProvider) *manifestCache {
 	return &manifestCache{
 		storage: storage,
 		manager: manager,

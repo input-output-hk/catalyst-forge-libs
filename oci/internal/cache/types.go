@@ -2,6 +2,7 @@ package cache
 
 import (
 	"fmt"
+	"sync"
 	"time"
 )
 
@@ -76,6 +77,7 @@ func (e *Entry) Size() int64 {
 
 // Metrics tracks cache performance and usage statistics.
 type Metrics struct {
+	mu sync.RWMutex
 	// Hits is the number of cache hits.
 	Hits int64
 	// Misses is the number of cache misses.
@@ -92,6 +94,9 @@ type Metrics struct {
 
 // HitRate returns the cache hit rate as a value between 0.0 and 1.0.
 func (m *Metrics) HitRate() float64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	total := m.Hits + m.Misses
 	if total == 0 {
 		return 0.0
@@ -101,34 +106,61 @@ func (m *Metrics) HitRate() float64 {
 
 // RecordHit increments the hit counter.
 func (m *Metrics) RecordHit() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.Hits++
 }
 
 // RecordMiss increments the miss counter.
 func (m *Metrics) RecordMiss() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.Misses++
 }
 
 // RecordEviction increments the eviction counter.
 func (m *Metrics) RecordEviction() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.Evictions++
 }
 
 // RecordError increments the error counter.
 func (m *Metrics) RecordError() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.Errors++
 }
 
 // AddBytesStored increases the bytes stored counter.
 func (m *Metrics) AddBytesStored(bytes int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.BytesStored += bytes
 }
 
 // RemoveBytesStored decreases the bytes stored counter.
 func (m *Metrics) RemoveBytesStored(bytes int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.BytesStored -= bytes
 	if m.BytesStored < 0 {
 		m.BytesStored = 0
+	}
+}
+
+// GetStats returns a copy of the current metrics for thread-safe access.
+func (m *Metrics) GetStats() Metrics {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return Metrics{
+		Hits:          m.Hits,
+		Misses:        m.Misses,
+		Evictions:     m.Evictions,
+		Errors:        m.Errors,
+		BytesStored:   m.BytesStored,
+		EntriesStored: m.EntriesStored,
 	}
 }
 
