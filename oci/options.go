@@ -9,6 +9,7 @@ import (
 	fsapi "github.com/input-output-hk/catalyst-forge-libs/fs"
 	"oras.land/oras-go/v2/registry/remote/auth"
 
+	"github.com/input-output-hk/catalyst-forge-libs/oci/internal/cache"
 	"github.com/input-output-hk/catalyst-forge-libs/oci/internal/oras"
 )
 
@@ -27,6 +28,10 @@ type ClientOptions struct {
 	// FS provides filesystem operations for archive/temp/extraction handling.
 	// If nil, a default OS-backed filesystem will be used.
 	FS fsapi.Filesystem
+
+	// CacheConfig contains cache configuration for OCI operations.
+	// If nil, caching is disabled.
+	CacheConfig *CacheConfig
 }
 
 // HTTPConfig contains configuration for HTTP transport settings.
@@ -45,6 +50,45 @@ type HTTPConfig struct {
 	// If empty, applies to all registries. Supports hostname matching.
 	Registries []string
 }
+
+// CacheConfig contains configuration for OCI caching behavior.
+type CacheConfig struct {
+	// Coordinator provides the cache implementation.
+	// If nil, caching is disabled.
+	Coordinator cache.Cache
+
+	// CachePath specifies the filesystem path for cache storage.
+	// If empty and Coordinator is nil, no cache directory is created.
+	CachePath string
+
+	// Policy controls when caching should be used.
+	Policy CachePolicy
+
+	// MaxSizeBytes is the maximum size of the cache in bytes.
+	// Defaults to 1GB if not specified.
+	MaxSizeBytes int64
+
+	// DefaultTTL is the default time-to-live for cache entries.
+	// Defaults to 24 hours if not specified.
+	DefaultTTL time.Duration
+}
+
+// CachePolicy defines when caching should be applied to operations.
+type CachePolicy string
+
+const (
+	// CachePolicyDisabled disables caching completely.
+	CachePolicyDisabled CachePolicy = "disabled"
+
+	// CachePolicyEnabled enables caching for all operations.
+	CachePolicyEnabled CachePolicy = "enabled"
+
+	// CachePolicyPull enables caching only for pull operations.
+	CachePolicyPull CachePolicy = "pull"
+
+	// CachePolicyPush enables caching only for push operations.
+	CachePolicyPush CachePolicy = "push"
+)
 
 // ClientOption is a functional option for configuring the Client.
 type ClientOption func(*ClientOptions)
@@ -168,6 +212,10 @@ type PushOptions struct {
 
 	// RetryDelay is the delay between retry attempts
 	RetryDelay time.Duration
+
+	// CacheBypass disables caching for this specific push operation.
+	// When true, the operation will bypass any configured cache.
+	CacheBypass bool
 }
 
 // PushOption is a functional option for configuring Push operations.
@@ -213,6 +261,13 @@ func WithRetryDelay(delay time.Duration) PushOption {
 	}
 }
 
+// WithPushCacheBypass disables caching for this push operation.
+func WithPushCacheBypass(bypass bool) PushOption {
+	return func(opts *PushOptions) {
+		opts.CacheBypass = bypass
+	}
+}
+
 // PullOptions contains options for the Pull operation.
 type PullOptions struct {
 	// MaxFiles is the maximum number of files allowed in the archive.
@@ -243,6 +298,10 @@ type PullOptions struct {
 
 	// RetryDelay is the delay between retry attempts.
 	RetryDelay time.Duration
+
+	// CacheBypass disables caching for this specific pull operation.
+	// When true, the operation will bypass any configured cache.
+	CacheBypass bool
 }
 
 // PullOption is a functional option for configuring Pull operations.
@@ -304,6 +363,13 @@ func WithPullRetryDelay(delay time.Duration) PullOption {
 	}
 }
 
+// WithPullCacheBypass disables caching for this pull operation.
+func WithPullCacheBypass(bypass bool) PullOption {
+	return func(opts *PullOptions) {
+		opts.CacheBypass = bypass
+	}
+}
+
 // WithMaxFiles is an alias for WithPullMaxFiles for convenience.
 func WithMaxFiles(maxFiles int) PullOption {
 	return WithPullMaxFiles(maxFiles)
@@ -312,6 +378,11 @@ func WithMaxFiles(maxFiles int) PullOption {
 // WithMaxSize is an alias for WithPullMaxSize for convenience.
 func WithMaxSize(maxSize int64) PullOption {
 	return WithPullMaxSize(maxSize)
+}
+
+// WithCacheBypass is an alias for WithPullCacheBypass for convenience.
+func WithCacheBypass(bypass bool) PullOption {
+	return WithPullCacheBypass(bypass)
 }
 
 // DefaultPullOptions returns the default pull options.
@@ -325,6 +396,7 @@ func DefaultPullOptions() *PullOptions {
 		StripPrefix:         "",
 		MaxRetries:          3,
 		RetryDelay:          2 * time.Second,
+		CacheBypass:         false, // Use cache by default
 	}
 }
 
@@ -336,15 +408,17 @@ func DefaultPushOptions() *PushOptions {
 		ProgressCallback: nil,
 		MaxRetries:       3,
 		RetryDelay:       2 * time.Second,
+		CacheBypass:      false, // Use cache by default
 	}
 }
 
 // DefaultClientOptions returns the default client options.
 func DefaultClientOptions() *ClientOptions {
 	return &ClientOptions{
-		Auth:       nil, // Use default Docker credential chain
-		HTTPConfig: nil, // Use default HTTPS with certificate validation
-		FS:         nil, // Filled by constructor if unset
+		Auth:        nil, // Use default Docker credential chain
+		HTTPConfig:  nil, // Use default HTTPS with certificate validation
+		FS:          nil, // Filled by constructor if unset
+		CacheConfig: nil, // Caching disabled by default
 	}
 }
 
@@ -352,5 +426,46 @@ func DefaultClientOptions() *ClientOptions {
 func WithFilesystem(fsys fsapi.Filesystem) ClientOption {
 	return func(opts *ClientOptions) {
 		opts.FS = fsys
+	}
+}
+
+// WithCache configures caching for OCI operations.
+// The coordinator parameter provides the cache implementation.
+// The cachePath parameter specifies where to store cache data.
+// The maxSizeBytes parameter sets the maximum cache size (0 for default 1GB).
+// The defaultTTL parameter sets the default TTL for cache entries (0 for default 24h).
+func WithCache(coordinator cache.Cache, cachePath string, maxSizeBytes int64, defaultTTL time.Duration) ClientOption {
+	return func(opts *ClientOptions) {
+		if opts.CacheConfig == nil {
+			opts.CacheConfig = &CacheConfig{}
+		}
+		opts.CacheConfig.Coordinator = coordinator
+		opts.CacheConfig.CachePath = cachePath
+		opts.CacheConfig.Policy = CachePolicyEnabled
+		if maxSizeBytes > 0 {
+			opts.CacheConfig.MaxSizeBytes = maxSizeBytes
+		} else {
+			opts.CacheConfig.MaxSizeBytes = 1024 * 1024 * 1024 // 1GB default
+		}
+		if defaultTTL > 0 {
+			opts.CacheConfig.DefaultTTL = defaultTTL
+		} else {
+			opts.CacheConfig.DefaultTTL = 24 * time.Hour // 24 hours default
+		}
+	}
+}
+
+// WithCachePolicy sets the cache policy for OCI operations.
+// The policy parameter controls when caching should be applied:
+// - CachePolicyDisabled: No caching
+// - CachePolicyEnabled: Cache all operations
+// - CachePolicyPull: Cache only pull operations
+// - CachePolicyPush: Cache only push operations
+func WithCachePolicy(policy CachePolicy) ClientOption {
+	return func(opts *ClientOptions) {
+		if opts.CacheConfig == nil {
+			opts.CacheConfig = &CacheConfig{}
+		}
+		opts.CacheConfig.Policy = policy
 	}
 }

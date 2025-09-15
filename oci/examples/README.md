@@ -15,6 +15,12 @@ This directory contains runnable example programs demonstrating how to use the O
 - **[custom_auth/main.go](./custom_auth/main.go)** - Custom authentication examples
 - **[custom_archiver/main.go](./custom_archiver/main.go)** - Implementing custom archiver formats
 
+### Caching Examples
+
+- **[basic_caching/main.go](./basic_caching/main.go)** - Basic caching functionality and performance benefits
+- **[advanced_caching/main.go](./advanced_caching/main.go)** - Advanced cache configuration with size limits and policies
+- **[cache_management/main.go](./cache_management/main.go)** - Cache monitoring, statistics, and management operations
+
 ### Security Examples
 
 - **[security/main.go](./security/main.go)** - Security best practices and validation
