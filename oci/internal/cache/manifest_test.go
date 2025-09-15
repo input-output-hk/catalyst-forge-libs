@@ -15,6 +15,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testConfigProvider implements ConfigProvider for testing
+type testConfigProvider struct {
+	config Config
+}
+
+func (t *testConfigProvider) Config() Config {
+	return t.config
+}
+
 // TestManifestCacheTTLExpiration tests that manifests expire correctly after TTL
 func TestManifestCacheTTLExpiration(t *testing.T) {
 	// Create a temporary filesystem for testing
@@ -27,11 +36,9 @@ func TestManifestCacheTTLExpiration(t *testing.T) {
 		MaxSizeBytes: 100 * 1024 * 1024,      // 100MB
 		DefaultTTL:   100 * time.Millisecond, // Very short TTL for testing
 	}
-	manager, err := NewManager(config)
-	require.NoError(t, err)
 
 	// Create manifest cache
-	cache := NewManifestCache(storage, manager)
+	cache := NewManifestCache(storage, &testConfigProvider{config: config})
 
 	ctx := context.Background()
 	digestStr := "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
@@ -83,10 +90,7 @@ func TestManifestCacheConcurrentAccess(t *testing.T) {
 		MaxSizeBytes: 100 * 1024 * 1024, // 100MB
 		DefaultTTL:   5 * time.Minute,
 	}
-	manager, err := NewManager(config)
-	require.NoError(t, err)
-
-	cache := NewManifestCache(storage, manager)
+	cache := NewManifestCache(storage, &testConfigProvider{config: config})
 
 	ctx := context.Background()
 	const numGoroutines = 10
@@ -147,10 +151,7 @@ func TestManifestCacheValidation(t *testing.T) {
 		MaxSizeBytes: 100 * 1024 * 1024, // 100MB
 		DefaultTTL:   5 * time.Minute,
 	}
-	manager, err := NewManager(config)
-	require.NoError(t, err)
-
-	cache := NewManifestCache(storage, manager)
+	cache := NewManifestCache(storage, &testConfigProvider{config: config})
 
 	ctx := context.Background()
 
@@ -209,10 +210,7 @@ func TestManifestCacheMalformedManifests(t *testing.T) {
 		MaxSizeBytes: 100 * 1024 * 1024, // 100MB
 		DefaultTTL:   5 * time.Minute,
 	}
-	manager, err := NewManager(config)
-	require.NoError(t, err)
-
-	cache := NewManifestCache(storage, manager)
+	cache := NewManifestCache(storage, &testConfigProvider{config: config})
 
 	ctx := context.Background()
 	digestStr := "sha256:malformed"
@@ -271,10 +269,7 @@ func TestManifestCacheBasicOperations(t *testing.T) {
 		MaxSizeBytes: 100 * 1024 * 1024, // 100MB
 		DefaultTTL:   5 * time.Minute,
 	}
-	manager, err := NewManager(config)
-	require.NoError(t, err)
-
-	cache := NewManifestCache(storage, manager)
+	cache := NewManifestCache(storage, &testConfigProvider{config: config})
 
 	ctx := context.Background()
 

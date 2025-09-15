@@ -21,14 +21,6 @@ func setupTagCacheTest(t *testing.T) (*tagCache, *billyfs.FS, func()) {
 	storage, err := NewStorage(fs, "/cache")
 	require.NoError(t, err)
 
-	// Create manager
-	config := Config{
-		MaxSizeBytes: 100 * 1024 * 1024, // 100MB
-		DefaultTTL:   time.Hour,
-	}
-	manager, err := NewManager(config)
-	require.NoError(t, err)
-
 	// Create tag resolver config
 	tagConfig := TagResolverConfig{
 		DefaultTTL:     time.Hour,
@@ -37,7 +29,7 @@ func setupTagCacheTest(t *testing.T) (*tagCache, *billyfs.FS, func()) {
 	}
 
 	// Create tag cache
-	tagCache := NewTagCache(storage, manager, tagConfig)
+	tagCache := NewTagCache(storage, tagConfig)
 
 	cleanup := func() {
 		// Cleanup if needed
@@ -206,20 +198,13 @@ func TestTagCache_HistorySizeLimit(t *testing.T) {
 	storage, err := NewStorage(fs, "/cache")
 	require.NoError(t, err)
 
-	config := Config{
-		MaxSizeBytes: 100 * 1024 * 1024,
-		DefaultTTL:   time.Hour,
-	}
-	manager, err := NewManager(config)
-	require.NoError(t, err)
-
 	tagConfig := TagResolverConfig{
 		DefaultTTL:     time.Hour,
 		MaxHistorySize: 2, // Only keep 2 history entries
 		EnableHistory:  true,
 	}
 
-	tc := NewTagCache(storage, manager, tagConfig)
+	tc := NewTagCache(storage, tagConfig)
 
 	ctx := context.Background()
 	reference := "docker.io/library/nginx:latest"
@@ -262,20 +247,13 @@ func TestTagCache_TTLExpiration(t *testing.T) {
 	storage, err := NewStorage(fs, "/cache")
 	require.NoError(t, err)
 
-	config := Config{
-		MaxSizeBytes: 100 * 1024 * 1024,
-		DefaultTTL:   time.Hour,
-	}
-	manager, err := NewManager(config)
-	require.NoError(t, err)
-
 	tagConfig := TagResolverConfig{
 		DefaultTTL:     50 * time.Millisecond, // Very short TTL
 		MaxHistorySize: 5,
 		EnableHistory:  true,
 	}
 
-	tc := NewTagCache(storage, manager, tagConfig)
+	tc := NewTagCache(storage, tagConfig)
 
 	ctx := context.Background()
 	reference := "docker.io/library/nginx:latest"
@@ -454,20 +432,13 @@ func TestTagCache_DisabledHistory(t *testing.T) {
 	storage, err := NewStorage(fs, "/cache")
 	require.NoError(t, err)
 
-	config := Config{
-		MaxSizeBytes: 100 * 1024 * 1024,
-		DefaultTTL:   time.Hour,
-	}
-	manager, err := NewManager(config)
-	require.NoError(t, err)
-
 	tagConfig := TagResolverConfig{
 		DefaultTTL:     time.Hour,
 		MaxHistorySize: 5,
 		EnableHistory:  false, // Disable history
 	}
 
-	tc := NewTagCache(storage, manager, tagConfig)
+	tc := NewTagCache(storage, tagConfig)
 
 	ctx := context.Background()
 	reference := "docker.io/library/nginx:latest"

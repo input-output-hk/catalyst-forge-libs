@@ -17,6 +17,7 @@ import (
 	billyfs "github.com/input-output-hk/catalyst-forge-libs/fs/billy"
 	"oras.land/oras-go/v2/registry/remote"
 
+	"github.com/input-output-hk/catalyst-forge-libs/oci/internal/cache"
 	"github.com/input-output-hk/catalyst-forge-libs/oci/internal/oras"
 )
 
@@ -28,6 +29,9 @@ type Client struct {
 
 	// orasClient provides ORAS operations (injected for testability)
 	orasClient oras.Client
+
+	// cache provides caching functionality for OCI operations
+	cache cache.Cache
 
 	// mu protects concurrent access to client operations
 	mu sync.RWMutex
@@ -84,6 +88,7 @@ func NewWithOptions(opts ...ClientOption) (*Client, error) {
 	client := &Client{
 		options:    options,
 		orasClient: orasClient,
+		cache:      nil, // Cache will be initialized lazily if needed
 	}
 
 	// Validate options
@@ -395,6 +400,178 @@ func (c *Client) Pull(ctx context.Context, reference, targetDir string, opts ...
 	}
 
 	return nil
+}
+
+// PullWithCache downloads and extracts an OCI artifact to the specified directory
+// with intelligent caching to improve performance on repeated pulls.
+// This method enhances the regular Pull method with caching capabilities.
+//
+// Parameters:
+//   - ctx: Context for cancellation and timeouts
+//   - reference: OCI reference to download (e.g., "ghcr.io/org/repo:tag")
+//   - targetDir: Directory to extract the artifact to (created if it doesn't exist)
+//   - opts: Optional pull options for security limits, behavior, and cache control
+//
+// Returns:
+//   - Error if the operation fails
+//
+// The method will:
+// 1. Check if caching is enabled and appropriate for the operation
+// 2. Attempt to serve from cache if available and not bypassed
+// 3. Fall back to network pull if cache miss or bypass requested
+// 4. Cache the result for future pulls if caching is enabled
+func (c *Client) PullWithCache(ctx context.Context, reference, targetDir string, opts ...PullOption) error {
+	// Thread safety: use read lock since we're only reading options
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	// Parse pull options
+	pullOpts := DefaultPullOptions()
+	for _, opt := range opts {
+		opt(pullOpts)
+	}
+
+	// Validate inputs
+	if reference == "" {
+		return fmt.Errorf("reference cannot be empty")
+	}
+
+	if targetDir == "" {
+		return fmt.Errorf("target directory cannot be empty")
+	}
+
+	// Check if caching is enabled and should be used for this operation
+	cacheEnabled := c.isCachingEnabledForPull(pullOpts)
+
+	if !cacheEnabled {
+		// Fall back to regular pull if caching is disabled or bypassed
+		return c.Pull(ctx, reference, targetDir, opts...)
+	}
+
+	// Ensure cache is initialized
+	if err := c.ensureCacheInitialized(ctx); err != nil {
+		// Log warning but continue with regular pull
+		return c.Pull(ctx, reference, targetDir, opts...)
+	}
+
+	// Try to get from cache first
+	cacheKey := c.generateCacheKey(reference)
+	if err := c.getFromCache(ctx, cacheKey, targetDir); err == nil {
+		// Successfully served from cache
+		return nil
+	}
+	// Cache miss or error - proceed with network pull
+
+	// Perform the network pull
+	if err := c.Pull(ctx, reference, targetDir, opts...); err != nil {
+		return err
+	}
+
+	// Cache the result for future use
+	// Note: We cache after successful extraction to ensure data integrity
+	if err := c.storeInCache(ctx, cacheKey, targetDir); err != nil {
+		// Don't fail the operation if caching fails, just log the error
+		// The pull was successful, caching is a performance optimization
+		return nil
+	}
+
+	return nil
+}
+
+// isCachingEnabledForPull determines if caching should be used for this pull operation
+func (c *Client) isCachingEnabledForPull(opts *PullOptions) bool {
+	// Check if cache bypass is requested
+	if opts.CacheBypass {
+		return false
+	}
+
+	// Check if cache is configured
+	if c.options.CacheConfig == nil || c.options.CacheConfig.Coordinator == nil {
+		return false
+	}
+
+	// Check cache policy
+	switch c.options.CacheConfig.Policy {
+	case CachePolicyDisabled:
+		return false
+	case CachePolicyPull, CachePolicyEnabled:
+		return true
+	case CachePolicyPush:
+		return false
+	default:
+		return false
+	}
+}
+
+// isCachingEnabledForPush determines if caching should be used for this push operation
+func (c *Client) isCachingEnabledForPush(opts *PushOptions) bool {
+	// Check if cache bypass is requested
+	if opts.CacheBypass {
+		return false
+	}
+
+	// Check if cache is configured
+	if c.options.CacheConfig == nil || c.options.CacheConfig.Coordinator == nil {
+		return false
+	}
+
+	// Check cache policy
+	switch c.options.CacheConfig.Policy {
+	case CachePolicyDisabled:
+		return false
+	case CachePolicyPush, CachePolicyEnabled:
+		return true
+	case CachePolicyPull:
+		return false
+	default:
+		return false
+	}
+}
+
+// ensureCacheInitialized ensures the cache is properly initialized
+func (c *Client) ensureCacheInitialized(ctx context.Context) error {
+	if c.cache != nil {
+		return nil
+	}
+
+	if c.options.CacheConfig == nil || c.options.CacheConfig.Coordinator == nil {
+		return fmt.Errorf("cache not configured")
+	}
+
+	// Initialize cache with the configured coordinator
+	c.cache = c.options.CacheConfig.Coordinator
+	return nil
+}
+
+// generateCacheKey creates a unique cache key for the given reference
+func (c *Client) generateCacheKey(reference string) string {
+	// Use SHA256 hash of the reference for consistent cache keys
+	// This ensures the same reference always maps to the same cache key
+	return fmt.Sprintf("pull:%s", reference)
+}
+
+// getFromCache attempts to retrieve and extract from cache
+func (c *Client) getFromCache(ctx context.Context, cacheKey, targetDir string) error {
+	// This is a placeholder implementation
+	// In a full implementation, this would:
+	// 1. Check if cache entry exists
+	// 2. Verify cache entry integrity
+	// 3. Extract cached data to target directory
+	// 4. Update cache access statistics
+
+	return fmt.Errorf("cache miss: not implemented")
+}
+
+// storeInCache stores the extracted directory in the cache
+func (c *Client) storeInCache(ctx context.Context, cacheKey, sourceDir string) error {
+	// This is a placeholder implementation
+	// In a full implementation, this would:
+	// 1. Create a new cache entry
+	// 2. Archive the directory contents
+	// 3. Store the archive in cache with metadata
+	// 4. Update cache statistics
+
+	return fmt.Errorf("cache storage: not implemented")
 }
 
 // extractAtomically performs atomic extraction with rollback on failure

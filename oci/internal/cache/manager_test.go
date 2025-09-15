@@ -43,7 +43,7 @@ func setupTestManager(t *testing.T, config Config) *Coordinator {
 	fs := billyfs.NewInMemoryFS()
 
 	ctx := context.Background()
-	coordinator, err := NewCoordinator(ctx, config, fs, tempDir)
+	coordinator, err := NewCoordinator(ctx, config, fs, tempDir, nil)
 	require.NoError(t, err)
 
 	// Ensure coordinator is properly closed after test
@@ -231,7 +231,7 @@ func TestCoordinator_PerformCleanup(t *testing.T) {
 	fs := billyfs.NewInMemoryFS()
 
 	ctx := context.Background()
-	coordinator, err := NewCoordinator(ctx, config, fs, tempDir)
+	coordinator, err := NewCoordinator(ctx, config, fs, tempDir, nil)
 	require.NoError(t, err)
 
 	// Close coordinator after test (disable automatic cleanup to avoid interference)
@@ -334,9 +334,9 @@ func TestCoordinator_Metrics(t *testing.T) {
 	ctx := context.Background()
 
 	// Initially no hits or misses
-	metrics := coordinator.GetMetrics()
-	assert.Equal(t, int64(0), metrics.Hits)
-	assert.Equal(t, int64(0), metrics.Misses)
+	metricsSnapshot := coordinator.GetMetrics().GetSnapshot()
+	assert.Equal(t, int64(0), metricsSnapshot.Hits)
+	assert.Equal(t, int64(0), metricsSnapshot.Misses)
 
 	// Perform some operations
 	digest := validTestDigest("metrics_test")
@@ -356,10 +356,10 @@ func TestCoordinator_Metrics(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check metrics
-	metrics = coordinator.GetMetrics()
-	assert.Equal(t, int64(1), metrics.Hits)
-	assert.Equal(t, int64(1), metrics.Misses)
-	assert.Equal(t, float64(0.5), metrics.HitRate())
+	metricsSnapshot = coordinator.GetMetrics().GetSnapshot()
+	assert.Equal(t, int64(1), metricsSnapshot.Hits)
+	assert.Equal(t, int64(1), metricsSnapshot.Misses)
+	assert.Equal(t, float64(0.5), metricsSnapshot.HitRate)
 }
 
 func TestCoordinator_Close(t *testing.T) {
@@ -401,7 +401,7 @@ func TestCoordinator_InvalidConfig(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	_, err = NewCoordinator(ctx, invalidConfig, fs, tempDir)
+	_, err = NewCoordinator(ctx, invalidConfig, fs, tempDir, nil)
 	assert.Error(t, err)
 }
 
@@ -421,7 +421,7 @@ func TestCoordinator_CachePath(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	coordinator, err := NewCoordinator(ctx, config, fs, cachePath)
+	coordinator, err := NewCoordinator(ctx, config, fs, cachePath, nil)
 	require.NoError(t, err)
 
 	// Verify cache directory was created
@@ -544,7 +544,7 @@ func TestCoordinator_IndexRecovery(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	coordinator1, err := NewCoordinator(ctx, config, fs1, tempDir)
+	coordinator1, err := NewCoordinator(ctx, config, fs1, tempDir, nil)
 	require.NoError(t, err)
 
 	// Add some data
@@ -566,7 +566,7 @@ func TestCoordinator_IndexRecovery(t *testing.T) {
 	fs2 := billyfs.NewInMemoryFS()
 	require.NoError(t, err)
 
-	coordinator2, err := NewCoordinator(ctx, config, fs2, tempDir)
+	coordinator2, err := NewCoordinator(ctx, config, fs2, tempDir, nil)
 	require.NoError(t, err)
 	defer coordinator2.Close()
 
@@ -583,22 +583,6 @@ func TestConfig_SetDefaults(t *testing.T) {
 	// SetDefaults doesn't actually set defaults for Config currently
 	// This test ensures the method exists and runs without error
 	assert.NotNil(t, config)
-}
-
-func TestMetrics_GetStats(t *testing.T) {
-	metrics := &Metrics{}
-	// Add some test data
-	metrics.RecordHit()
-	metrics.RecordMiss()
-	metrics.RecordEviction()
-	metrics.AddBytesStored(1000)
-
-	stats := metrics.GetStats()
-	assert.Equal(t, int64(1), stats.Hits)
-	assert.Equal(t, int64(1), stats.Misses)
-	assert.Equal(t, int64(1), stats.Evictions)
-	assert.Equal(t, int64(1000), stats.BytesStored)
-	assert.Equal(t, int64(0), stats.EntriesStored)
 }
 
 func TestTagResolverConfig_SetDefaults(t *testing.T) {

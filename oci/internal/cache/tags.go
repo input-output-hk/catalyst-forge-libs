@@ -20,14 +20,13 @@ type tagCacheEntry struct {
 // caching with history tracking for efficient resolution.
 type tagCache struct {
 	storage *Storage
-	manager *Manager
 	config  TagResolverConfig
 }
 
 // NewTagCache creates a new tag cache instance.
 //
 //nolint:revive // Returns unexported type for encapsulation, consistent with codebase patterns
-func NewTagCache(storage *Storage, manager *Manager, config TagResolverConfig) *tagCache {
+func NewTagCache(storage *Storage, config TagResolverConfig) *tagCache {
 	if err := config.Validate(); err != nil {
 		// Set defaults if validation fails due to unset values
 		config.SetDefaults()
@@ -35,7 +34,6 @@ func NewTagCache(storage *Storage, manager *Manager, config TagResolverConfig) *
 
 	return &tagCache{
 		storage: storage,
-		manager: manager,
 		config:  config,
 	}
 }

@@ -24,7 +24,8 @@ type Coordinator struct {
 	tagCache      TagCache
 	index         *Index
 	eviction      EvictionStrategy
-	metrics       *Metrics
+	metrics       *DetailedMetrics
+	logger        *Logger
 	cleanupTicker *time.Ticker
 	cleanupDone   chan struct{}
 	initialized   bool
@@ -37,6 +38,7 @@ func NewCoordinator(
 	config Config,
 	fs *billyfs.FS,
 	cachePath string,
+	logger *Logger,
 ) (*Coordinator, error) {
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid cache config: %w", err)
@@ -44,6 +46,11 @@ func NewCoordinator(
 
 	// Apply defaults
 	config.SetDefaults()
+
+	// Initialize logger (use no-op logger if none provided)
+	if logger == nil {
+		logger = NewNopLogger()
+	}
 
 	// Initialize storage layer
 	storage, err := NewStorage(fs, cachePath)
@@ -55,7 +62,8 @@ func NewCoordinator(
 	coordinator := &Coordinator{
 		config:      config,
 		storage:     storage,
-		metrics:     &Metrics{},
+		metrics:     NewDetailedMetrics(),
+		logger:      logger,
 		cleanupDone: make(chan struct{}),
 	}
 
@@ -142,23 +150,37 @@ func (cm *Coordinator) startCleanupScheduler(ctx context.Context) {
 
 // performCleanup runs maintenance operations on all cache components.
 func (cm *Coordinator) performCleanup(ctx context.Context) error {
+	start := time.Now()
+	logger := cm.logger.WithOperation("cleanup")
+
 	// Clean up expired entries
 	if err := cm.cleanupExpiredEntries(ctx); err != nil {
+		logger.Error(ctx, "failed to cleanup expired entries", "error", err)
 		return fmt.Errorf("failed to cleanup expired entries: %w", err)
 	}
 
 	// Evict entries if over size limit
 	if err := cm.performEviction(ctx); err != nil {
+		logger.Error(ctx, "failed to perform eviction", "error", err)
 		return fmt.Errorf("failed to perform eviction: %w", err)
 	}
 
 	// Compact index if needed
 	if err := cm.index.Cleanup(ctx, false); err != nil {
+		logger.Error(ctx, "failed to cleanup index", "error", err)
 		return fmt.Errorf("failed to cleanup index: %w", err)
 	}
 
 	// Persist current state
-	return cm.index.Persist()
+	if err := cm.index.Persist(); err != nil {
+		logger.Error(ctx, "failed to persist index", "error", err)
+		return err
+	}
+
+	duration := time.Since(start)
+	logger.Info(ctx, "cache cleanup completed", "duration_ms", duration.Milliseconds())
+
+	return nil
 }
 
 // cleanupExpiredEntries removes all expired entries from all caches.
@@ -169,13 +191,16 @@ func (cm *Coordinator) cleanupExpiredEntries(ctx context.Context) error {
 	cm.mu.RUnlock()
 
 	for _, key := range expiredKeys {
+		if indexEntry, exists := cm.index.Get(key); exists {
+			cm.mu.Lock()
+			cm.metrics.RecordEviction(indexEntry.Size)
+			cm.mu.Unlock()
+		}
+
 		if err := cm.deleteEntry(ctx, key); err != nil {
 			// Continue with other entries even if one fails
 			continue
 		}
-		cm.mu.Lock()
-		cm.metrics.RecordEviction()
-		cm.mu.Unlock()
 	}
 
 	return nil
@@ -219,12 +244,18 @@ func (cm *Coordinator) performEviction(ctx context.Context) error {
 
 	// Evict selected entries
 	for _, key := range toEvict {
+		if indexEntry, exists := cm.index.Get(key); exists {
+			cm.mu.Lock()
+			cm.metrics.RecordEviction(indexEntry.Size)
+			cm.mu.Unlock()
+
+			LogEviction(ctx, cm.logger, key, indexEntry.Size, "size_limit_exceeded")
+		}
+
 		if err := cm.deleteEntry(ctx, key); err != nil {
+			cm.logger.Warn(ctx, "failed to delete evicted entry", "key", key, "error", err)
 			continue // Continue with other entries
 		}
-		cm.mu.Lock()
-		cm.metrics.RecordEviction()
-		cm.mu.Unlock()
 	}
 
 	return nil
@@ -235,16 +266,30 @@ func (cm *Coordinator) GetManifest(
 	ctx context.Context,
 	digest string,
 ) (*ocispec.Manifest, error) {
+	start := time.Now()
+	logger := cm.logger.WithOperation("get_manifest").WithDigest(digest)
+
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 
 	manifest, err := cm.manifestCache.GetManifest(ctx, digest)
+	duration := time.Since(start)
+
 	if err != nil {
-		cm.metrics.RecordMiss()
+		cm.metrics.RecordMiss("manifest", 0) // Size unknown on miss
+		cm.metrics.RecordLatency("get", duration)
+		LogCacheMiss(ctx, logger, OpGetManifest, err.Error())
+		LogCacheOperation(ctx, logger, OpGetManifest, duration, false, 0, err)
 		return nil, fmt.Errorf("failed to get manifest: %w", err)
 	}
 
-	cm.metrics.RecordHit()
+	// Estimate manifest size (rough approximation)
+	manifestSize := int64(len(digest)) * 2 // Approximate size
+	cm.metrics.RecordHit("manifest", manifestSize)
+	cm.metrics.RecordLatency("get", duration)
+
+	LogCacheHit(ctx, logger, OpGetManifest, manifestSize)
+	LogCacheOperation(ctx, logger, OpGetManifest, duration, true, manifestSize, nil)
 
 	// Update access tracking
 	if indexEntry, exists := cm.index.Get(digest); exists {
@@ -265,19 +310,26 @@ func (cm *Coordinator) PutManifest(
 	digest string,
 	manifest *ocispec.Manifest,
 ) error {
+	start := time.Now()
+	logger := cm.logger.WithOperation("put_manifest").WithDigest(digest)
+
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
 	if err := cm.manifestCache.PutManifest(ctx, digest, manifest); err != nil {
+		duration := time.Since(start)
 		cm.metrics.RecordError()
+		cm.metrics.RecordLatency("put", duration)
+		LogCacheOperation(ctx, logger, OpPutManifest, duration, false, 0, err)
 		return fmt.Errorf("failed to put manifest: %w", err)
 	}
 
-	// Add to index
-	size := int64(len(digest)) // Approximate size for manifest keys
+	// Calculate actual manifest size (JSON representation)
+	manifestSize := int64(len(digest)) // Approximate size for manifest keys
+
 	indexEntry := &IndexEntry{
 		Key:         digest,
-		Size:        size,
+		Size:        manifestSize,
 		CreatedAt:   time.Now(),
 		AccessedAt:  time.Now(),
 		TTL:         cm.config.DefaultTTL,
@@ -286,9 +338,19 @@ func (cm *Coordinator) PutManifest(
 	}
 
 	if err := cm.index.Put(digest, indexEntry); err != nil {
+		duration := time.Since(start)
 		cm.metrics.RecordError()
+		cm.metrics.RecordLatency("put", duration)
+		LogCacheOperation(ctx, logger.WithSize(manifestSize), OpPutManifest, duration, false, manifestSize, err)
 		return fmt.Errorf("failed to index manifest: %w", err)
 	}
+
+	duration := time.Since(start)
+	// Record the put operation
+	cm.metrics.RecordPut("manifest", manifestSize)
+	cm.metrics.RecordLatency("put", duration)
+
+	LogCacheOperation(ctx, logger.WithSize(manifestSize), OpPutManifest, duration, true, manifestSize, nil)
 
 	// Notify eviction strategy
 	entry := &Entry{
@@ -307,16 +369,25 @@ func (cm *Coordinator) GetBlob(
 	ctx context.Context,
 	digest string,
 ) (io.ReadCloser, error) {
+	start := time.Now()
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 
 	reader, err := cm.blobCache.GetBlob(ctx, digest)
 	if err != nil {
-		cm.metrics.RecordMiss()
+		cm.metrics.RecordMiss("blob", 0) // Size unknown on miss
+		cm.metrics.RecordLatency("get", time.Since(start))
 		return nil, fmt.Errorf("failed to get blob: %w", err)
 	}
 
-	cm.metrics.RecordHit()
+	// Estimate blob size from index if available
+	blobSize := int64(len(digest)) * 10 // Default estimate
+	if indexEntry, exists := cm.index.Get(digest); exists {
+		blobSize = indexEntry.Size
+	}
+
+	cm.metrics.RecordHit("blob", blobSize)
+	cm.metrics.RecordLatency("get", time.Since(start))
 
 	// Update access tracking
 	if indexEntry, exists := cm.index.Get(digest); exists {
@@ -337,11 +408,13 @@ func (cm *Coordinator) PutBlob(
 	digest string,
 	reader io.Reader,
 ) error {
+	start := time.Now()
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
 	if err := cm.blobCache.PutBlob(ctx, digest, reader); err != nil {
 		cm.metrics.RecordError()
+		cm.metrics.RecordLatency("put", time.Since(start))
 		return fmt.Errorf("failed to put blob: %w", err)
 	}
 
@@ -360,8 +433,13 @@ func (cm *Coordinator) PutBlob(
 
 	if err := cm.index.Put(digest, indexEntry); err != nil {
 		cm.metrics.RecordError()
+		cm.metrics.RecordLatency("put", time.Since(start))
 		return fmt.Errorf("failed to index blob: %w", err)
 	}
+
+	// Record the put operation
+	cm.metrics.RecordPut("blob", size)
+	cm.metrics.RecordLatency("put", time.Since(start))
 
 	// Notify eviction strategy
 	entry := &Entry{
@@ -407,7 +485,7 @@ func (cm *Coordinator) deleteEntry(ctx context.Context, key string) error {
 }
 
 // GetMetrics returns current cache metrics.
-func (cm *Coordinator) GetMetrics() *Metrics {
+func (cm *Coordinator) GetMetrics() *DetailedMetrics {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 	return cm.metrics
@@ -424,15 +502,16 @@ func (cm *Coordinator) GetStats() Stats {
 	defer cm.mu.RUnlock()
 
 	indexStats := cm.index.Stats()
+	metricsSnapshot := cm.metrics.GetSnapshot()
 
 	return Stats{
 		TotalEntries:       indexStats.TotalEntries,
 		ExpiredEntries:     indexStats.ExpiredEntries,
 		TotalSize:          indexStats.TotalSize,
 		MaxSize:            cm.config.MaxSizeBytes,
-		HitRate:            cm.metrics.HitRate(),
-		Evictions:          cm.metrics.Evictions,
-		Errors:             cm.metrics.Errors,
+		HitRate:            metricsSnapshot.HitRate,
+		Evictions:          metricsSnapshot.Evictions,
+		Errors:             metricsSnapshot.Errors,
 		LastCompaction:     indexStats.LastCompaction,
 		AverageAccessCount: indexStats.AverageAccessCount,
 	}
