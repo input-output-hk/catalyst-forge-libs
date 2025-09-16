@@ -4,6 +4,6 @@ use (
 	./fs
 	./oci
 	./secrets/core
-	./secrets/providers/aws
-	./secrets/providers/memory
+//./secrets/providers/aws
+//./secrets/providers/memory
 )
