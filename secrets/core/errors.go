@@ -2,7 +2,7 @@
 //
 // Error handling follows Go best practices with wrapped errors for context preservation.
 // All errors defined here can be unwrapped using errors.Is() and errors.As().
-package secrets
+package core
 
 import (
 	"errors"

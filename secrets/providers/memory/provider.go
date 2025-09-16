@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/input-output-hk/catalyst-forge-libs/secrets"
+	"github.com/input-output-hk/catalyst-forge-libs/secrets/core"
 )
 
 const (
@@ -21,7 +21,7 @@ const (
 // It provides thread-safe access to secrets stored in memory with no persistence.
 type Provider struct {
 	// store holds the secrets keyed by path and version
-	store map[string]map[string]*secrets.Secret
+	store map[string]map[string]*core.Secret
 	// mu protects concurrent access to the store
 	mu sync.RWMutex
 }
@@ -30,7 +30,7 @@ type Provider struct {
 // It initializes an empty secret store ready for use.
 func New() *Provider {
 	return &Provider{
-		store: make(map[string]map[string]*secrets.Secret),
+		store: make(map[string]map[string]*core.Secret),
 	}
 }
 
@@ -46,7 +46,7 @@ func (p *Provider) HealthCheck(ctx context.Context) error {
 	return nil
 }
 
-// Close gracefully shuts down the provider and clears all stored secrets.
+// Close gracefully shuts down the provider and clears all stored core.
 // This implements secure cleanup for the memory provider.
 func (p *Provider) Close() error {
 	p.mu.Lock()
@@ -66,7 +66,7 @@ func (p *Provider) Close() error {
 
 // Resolve retrieves a single secret by reference.
 // It supports version-specific resolution and context cancellation.
-func (p *Provider) Resolve(ctx context.Context, ref secrets.SecretRef) (*secrets.Secret, error) {
+func (p *Provider) Resolve(ctx context.Context, ref core.SecretRef) (*core.Secret, error) {
 	// Check context cancellation
 	select {
 	case <-ctx.Done():
@@ -93,7 +93,7 @@ func (p *Provider) Resolve(ctx context.Context, ref secrets.SecretRef) (*secrets
 	}
 
 	// Return a copy to prevent external modification
-	return &secrets.Secret{
+	return &core.Secret{
 		Value:     append([]byte(nil), secret.Value...), // Copy bytes
 		Version:   secret.Version,
 		CreatedAt: secret.CreatedAt,
@@ -106,8 +106,8 @@ func (p *Provider) Resolve(ctx context.Context, ref secrets.SecretRef) (*secrets
 // It returns a map of successfully resolved secrets, with missing secrets omitted.
 func (p *Provider) ResolveBatch(
 	ctx context.Context,
-	refs []secrets.SecretRef,
-) (map[string]*secrets.Secret, error) {
+	refs []core.SecretRef,
+) (map[string]*core.Secret, error) {
 	// Check context cancellation
 	select {
 	case <-ctx.Done():
@@ -118,7 +118,7 @@ func (p *Provider) ResolveBatch(
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	results := make(map[string]*secrets.Secret)
+	results := make(map[string]*core.Secret)
 
 	for _, ref := range refs {
 		versions, exists := p.store[ref.Path]
@@ -137,7 +137,7 @@ func (p *Provider) ResolveBatch(
 		}
 
 		// Return a copy to prevent external modification
-		results[ref.Path] = &secrets.Secret{
+		results[ref.Path] = &core.Secret{
 			Value:     append([]byte(nil), secret.Value...), // Copy bytes
 			Version:   secret.Version,
 			CreatedAt: secret.CreatedAt,
@@ -151,7 +151,7 @@ func (p *Provider) ResolveBatch(
 
 // Exists checks if a secret exists without retrieving its value.
 // It supports version-specific existence checks.
-func (p *Provider) Exists(ctx context.Context, ref secrets.SecretRef) (bool, error) {
+func (p *Provider) Exists(ctx context.Context, ref core.SecretRef) (bool, error) {
 	// Check context cancellation
 	select {
 	case <-ctx.Done():
@@ -178,7 +178,7 @@ func (p *Provider) Exists(ctx context.Context, ref secrets.SecretRef) (bool, err
 
 // Store saves a secret value to the provider.
 // It generates a version if none is specified and creates the secret metadata.
-func (p *Provider) Store(ctx context.Context, ref secrets.SecretRef, value []byte) error {
+func (p *Provider) Store(ctx context.Context, ref core.SecretRef, value []byte) error {
 	// Check context cancellation
 	select {
 	case <-ctx.Done():
@@ -191,7 +191,7 @@ func (p *Provider) Store(ctx context.Context, ref secrets.SecretRef, value []byt
 
 	// Initialize path map if it doesn't exist
 	if p.store[ref.Path] == nil {
-		p.store[ref.Path] = make(map[string]*secrets.Secret)
+		p.store[ref.Path] = make(map[string]*core.Secret)
 	}
 
 	version := ref.Version
@@ -200,7 +200,7 @@ func (p *Provider) Store(ctx context.Context, ref secrets.SecretRef, value []byt
 	}
 
 	// Create the secret with metadata
-	secret := &secrets.Secret{
+	secret := &core.Secret{
 		Value:     append([]byte(nil), value...), // Copy bytes
 		Version:   version,
 		CreatedAt: time.Now(),
@@ -214,7 +214,7 @@ func (p *Provider) Store(ctx context.Context, ref secrets.SecretRef, value []byt
 
 // Delete removes a secret from the provider.
 // It clears the secret value securely before removal.
-func (p *Provider) Delete(ctx context.Context, ref secrets.SecretRef) error {
+func (p *Provider) Delete(ctx context.Context, ref core.SecretRef) error {
 	// Check context cancellation
 	select {
 	case <-ctx.Done():
@@ -254,7 +254,7 @@ func (p *Provider) Delete(ctx context.Context, ref secrets.SecretRef) error {
 
 // Rotate creates a new version of the secret with random content.
 // It preserves the old version and returns the new secret.
-func (p *Provider) Rotate(ctx context.Context, ref secrets.SecretRef) (*secrets.Secret, error) {
+func (p *Provider) Rotate(ctx context.Context, ref core.SecretRef) (*core.Secret, error) {
 	// Check context cancellation
 	select {
 	case <-ctx.Done():
@@ -289,7 +289,7 @@ func (p *Provider) Rotate(ctx context.Context, ref secrets.SecretRef) (*secrets.
 	newVersion := fmt.Sprintf("v%d", time.Now().UnixNano())
 
 	// Create new secret
-	newSecret := &secrets.Secret{
+	newSecret := &core.Secret{
 		Value:     newValue,
 		Version:   newVersion,
 		CreatedAt: time.Now(),
@@ -299,13 +299,13 @@ func (p *Provider) Rotate(ctx context.Context, ref secrets.SecretRef) (*secrets.
 
 	// Initialize path map if needed
 	if p.store[ref.Path] == nil {
-		p.store[ref.Path] = make(map[string]*secrets.Secret)
+		p.store[ref.Path] = make(map[string]*core.Secret)
 	}
 
 	p.store[ref.Path][newVersion] = newSecret
 
 	// Return a copy
-	return &secrets.Secret{
+	return &core.Secret{
 		Value:     append([]byte(nil), newSecret.Value...),
 		Version:   newSecret.Version,
 		CreatedAt: newSecret.CreatedAt,

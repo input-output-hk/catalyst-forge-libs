@@ -1,6 +1,6 @@
-module github.com/input-output-hk/catalyst-forge-libs/secrets
+module github.com/input-output-hk/catalyst-forge-libs/secrets/core
 
-go 1.24.2
+go 1.22.0
 
 require github.com/stretchr/testify v1.11.1
 

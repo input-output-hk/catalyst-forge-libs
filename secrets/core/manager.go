@@ -1,6 +1,6 @@
 // Package secrets provides secure, provider-agnostic secrets management
 // with automatic memory cleanup and just-in-time resolution.
-package secrets
+package core
 
 import (
 	"context"

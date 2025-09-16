@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/input-output-hk/catalyst-forge-libs/secrets"
+	"github.com/input-output-hk/catalyst-forge-libs/secrets/core"
 )
 
 func TestMemoryProvider_Name(t *testing.T) {
@@ -26,7 +26,7 @@ func TestMemoryProvider_Close(t *testing.T) {
 	p := New()
 
 	// Store a secret first
-	ref := secrets.SecretRef{Path: "test/secret"}
+	ref := core.SecretRef{Path: "test/secret"}
 	value := []byte("test-value")
 	err := p.Store(context.Background(), ref, value)
 	require.NoError(t, err)
@@ -52,22 +52,22 @@ func TestMemoryProvider_Store(t *testing.T) {
 
 	tests := []struct {
 		name  string
-		ref   secrets.SecretRef
+		ref   core.SecretRef
 		value []byte
 	}{
 		{
 			name:  "basic store",
-			ref:   secrets.SecretRef{Path: "db/password"},
+			ref:   core.SecretRef{Path: "db/password"},
 			value: []byte("secret-password"),
 		},
 		{
 			name:  "with version",
-			ref:   secrets.SecretRef{Path: "api/key", Version: "v1"},
+			ref:   core.SecretRef{Path: "api/key", Version: "v1"},
 			value: []byte("api-key-v1"),
 		},
 		{
 			name: "with metadata",
-			ref: secrets.SecretRef{
+			ref: core.SecretRef{
 				Path:     "cert/private",
 				Version:  "latest",
 				Metadata: map[string]string{"type": "rsa"},
@@ -96,7 +96,7 @@ func TestMemoryProvider_Resolve(t *testing.T) {
 	ctx := context.Background()
 
 	// Store a secret first
-	ref := secrets.SecretRef{Path: "test/secret", Version: "v1"}
+	ref := core.SecretRef{Path: "test/secret", Version: "v1"}
 	value := []byte("test-value")
 	err := p.Store(ctx, ref, value)
 	require.NoError(t, err)
@@ -118,7 +118,7 @@ func TestMemoryProvider_Resolve_NotFound(t *testing.T) {
 	p := New()
 	ctx := context.Background()
 
-	ref := secrets.SecretRef{Path: "nonexistent"}
+	ref := core.SecretRef{Path: "nonexistent"}
 	secret, err := p.Resolve(ctx, ref)
 	assert.Error(t, err)
 	assert.Nil(t, secret)
@@ -136,9 +136,9 @@ func TestMemoryProvider_ResolveBatch(t *testing.T) {
 		"api/key":     []byte("apikey456"),
 	}
 
-	refs := make([]secrets.SecretRef, 0, len(secretValues))
+	refs := make([]core.SecretRef, 0, len(secretValues))
 	for path, value := range secretValues {
-		ref := secrets.SecretRef{Path: path}
+		ref := core.SecretRef{Path: path}
 		err := p.Store(ctx, ref, value)
 		require.NoError(t, err)
 		refs = append(refs, ref)
@@ -162,12 +162,12 @@ func TestMemoryProvider_ResolveBatch_PartialFailure(t *testing.T) {
 	ctx := context.Background()
 
 	// Store one secret
-	existingRef := secrets.SecretRef{Path: "existing"}
+	existingRef := core.SecretRef{Path: "existing"}
 	err := p.Store(ctx, existingRef, []byte("value"))
 	require.NoError(t, err)
 
 	// Try to resolve both existing and non-existing
-	refs := []secrets.SecretRef{
+	refs := []core.SecretRef{
 		existingRef,
 		{Path: "nonexistent"},
 	}
@@ -187,8 +187,8 @@ func TestMemoryProvider_Exists(t *testing.T) {
 	p := New()
 	ctx := context.Background()
 
-	existingRef := secrets.SecretRef{Path: "exists"}
-	nonExistingRef := secrets.SecretRef{Path: "does-not-exist"}
+	existingRef := core.SecretRef{Path: "exists"}
+	nonExistingRef := core.SecretRef{Path: "does-not-exist"}
 
 	// Store one secret
 	err := p.Store(ctx, existingRef, []byte("value"))
@@ -209,7 +209,7 @@ func TestMemoryProvider_Delete(t *testing.T) {
 	p := New()
 	ctx := context.Background()
 
-	ref := secrets.SecretRef{Path: "to-delete"}
+	ref := core.SecretRef{Path: "to-delete"}
 
 	// Store a secret
 	err := p.Store(ctx, ref, []byte("value"))
@@ -239,7 +239,7 @@ func TestMemoryProvider_Rotate(t *testing.T) {
 	p := New()
 	ctx := context.Background()
 
-	ref := secrets.SecretRef{Path: "rotate-me", Version: "v1"}
+	ref := core.SecretRef{Path: "rotate-me", Version: "v1"}
 
 	// Store initial secret
 	originalValue := []byte("original-value")
@@ -257,7 +257,7 @@ func TestMemoryProvider_Rotate(t *testing.T) {
 	assert.False(t, newSecret.CreatedAt.IsZero())
 
 	// Original secret should still be accessible
-	originalSecret, err := p.Resolve(ctx, secrets.SecretRef{Path: "rotate-me", Version: "v1"})
+	originalSecret, err := p.Resolve(ctx, core.SecretRef{Path: "rotate-me", Version: "v1"})
 	require.NoError(t, err)
 	assert.Equal(t, originalValue, originalSecret.Value)
 	assert.Equal(t, "v1", originalSecret.Version)
@@ -265,7 +265,7 @@ func TestMemoryProvider_Rotate(t *testing.T) {
 	// New secret should be accessible with its version
 	newSecretByVersion, err := p.Resolve(
 		ctx,
-		secrets.SecretRef{Path: "rotate-me", Version: newSecret.Version},
+		core.SecretRef{Path: "rotate-me", Version: newSecret.Version},
 	)
 	require.NoError(t, err)
 	assert.Equal(t, newSecret.Value, newSecretByVersion.Value)
@@ -280,7 +280,7 @@ func TestMemoryProvider_Concurrency(t *testing.T) {
 
 	for i := 0; i < 10; i++ {
 		go func(id int) {
-			ref := secrets.SecretRef{Path: fmt.Sprintf("concurrent/%d", id)}
+			ref := core.SecretRef{Path: fmt.Sprintf("concurrent/%d", id)}
 			value := []byte(fmt.Sprintf("value-%d", id))
 
 			// Store
@@ -309,7 +309,7 @@ func TestMemoryProvider_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	ref := secrets.SecretRef{Path: "test"}
+	ref := core.SecretRef{Path: "test"}
 	_, err := p.Resolve(ctx, ref)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "context canceled")

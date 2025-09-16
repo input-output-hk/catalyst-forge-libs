@@ -7,12 +7,12 @@
 //
 //	import "github.com/input-output-hk/catalyst-forge-libs/secrets/providers/memory"
 //
-//	config := &secrets.Config{
+//	config := &core.Config{
 //		DefaultProvider: "memory",
 //		AutoClear:      true, // Enable automatic cleanup
 //	}
 //
-//	manager := secrets.NewManager(config)
+//	manager := core.NewManager(config)
 //	defer manager.Close()
 //
 //	provider := memory.New()
@@ -22,7 +22,7 @@
 //
 // Store a secret:
 //
-//	ref := secrets.SecretRef{
+//	ref := core.SecretRef{
 //		Path:    "database/password",
 //		Version: "v1.0",
 //	}
@@ -59,10 +59,10 @@
 //
 // The package provides structured error types:
 //
-//	if errors.Is(err, secrets.ErrSecretNotFound) {
+//	if errors.Is(err, core.ErrSecretNotFound) {
 //		// Handle missing secret
 //	}
-//	if secrets.IsProviderError(err) {
+//	if core.IsProviderError(err) {
 //		// Handle provider-specific error
 //	}
 //
@@ -73,7 +73,7 @@
 //	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 //	defer cancel()
 //	secret, err := manager.Resolve(ctx, ref) // Will cancel after 5 seconds
-package secrets
+package core
 
 import (
 	"encoding/json"

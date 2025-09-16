@@ -1,4 +1,4 @@
-package secrets
+package core
 
 import "context"
 
@@ -21,6 +21,13 @@ type Resolver interface {
 
 // Provider extends Resolver with provider management capabilities.
 // All secret providers must implement this interface.
+//
+// Security Best Practices:
+// - Avoid storing credentials in memory for extended periods
+// - Prefer loading credentials just-in-time when resolving secrets
+// - Use provider-native credential management where available (e.g., AWS SDK credential chain)
+// - If credentials must be stored, use SecretString with appropriate options
+// - Clear sensitive credentials immediately after use
 type Provider interface {
 	Resolver
 
