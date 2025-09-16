@@ -23,14 +23,20 @@ type managerMockProvider struct {
 	batchError    error
 	existsResult  bool
 	existsError   error
+	storeError    error
+	deleteError   error
+	rotateError   error
+	rotateResult  *Secret
 	mu            sync.RWMutex
 	closed        bool
+	storedSecrets map[string][]byte
 }
 
 func newManagerMockProvider(name string) *managerMockProvider {
 	return &managerMockProvider{
-		name:         name,
-		batchResults: make(map[string]*Secret),
+		name:          name,
+		batchResults:  make(map[string]*Secret),
+		storedSecrets: make(map[string][]byte),
 	}
 }
 
@@ -82,6 +88,54 @@ func (m *managerMockProvider) Exists(ctx context.Context, ref SecretRef) (bool, 
 		return false, errors.New("provider closed")
 	}
 	return m.existsResult, m.existsError
+}
+
+// Store implements WriteableProvider interface
+func (m *managerMockProvider) Store(ctx context.Context, ref SecretRef, value []byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return errors.New("provider closed")
+	}
+	if m.storeError != nil {
+		return m.storeError
+	}
+	m.storedSecrets[ref.Path] = value
+	return nil
+}
+
+// Delete implements WriteableProvider interface
+func (m *managerMockProvider) Delete(ctx context.Context, ref SecretRef) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return errors.New("provider closed")
+	}
+	if m.deleteError != nil {
+		return m.deleteError
+	}
+	delete(m.storedSecrets, ref.Path)
+	return nil
+}
+
+// Rotate implements RotatableProvider interface
+func (m *managerMockProvider) Rotate(ctx context.Context, ref SecretRef) (*Secret, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.closed {
+		return nil, errors.New("provider closed")
+	}
+	if m.rotateError != nil {
+		return nil, m.rotateError
+	}
+	if m.rotateResult != nil {
+		return m.rotateResult, nil
+	}
+	// Default behavior: return a new secret with rotated version
+	return &Secret{
+		Value:   []byte("rotated-value"),
+		Version: "rotated-v1",
+	}, nil
 }
 
 func TestNewManager(t *testing.T) {
@@ -637,4 +691,398 @@ func BenchmarkManager_ResolveFrom(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_, _ = manager.ResolveFrom(ctx, "test-provider", ref)
 	}
+}
+
+func TestWriteableManager_Store(t *testing.T) {
+	t.Run("successful store", func(t *testing.T) {
+		manager := NewWriteableManager(&Config{
+			DefaultProvider: "test-provider",
+		})
+
+		provider := newManagerMockProvider("test-provider")
+		err := manager.RegisterProvider("test-provider", provider)
+		require.NoError(t, err)
+
+		ref := SecretRef{Path: "test/path"}
+		value := []byte("test-value")
+
+		err = manager.Store(context.Background(), ref, value)
+		assert.NoError(t, err)
+
+		// Verify the value was stored
+		provider.mu.RLock()
+		storedValue := provider.storedSecrets[ref.Path]
+		provider.mu.RUnlock()
+		assert.Equal(t, value, storedValue)
+	})
+
+	t.Run("store with non-writeable provider", func(t *testing.T) {
+		manager := NewWriteableManager(&Config{
+			DefaultProvider: "test-provider",
+		})
+
+		// Create a provider that doesn't implement WriteableProvider
+		// We'll use a minimal mock that only implements Provider
+		basicProvider := &struct {
+			Provider
+		}{
+			Provider: newManagerMockProvider("basic"),
+		}
+
+		// Override the methods to ensure it's not treated as writeable
+		err := manager.RegisterProvider("test-provider", basicProvider)
+		require.NoError(t, err)
+
+		ref := SecretRef{Path: "test/path"}
+		value := []byte("test-value")
+
+		err = manager.Store(context.Background(), ref, value)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "does not support write operations")
+	})
+
+	t.Run("store with specific provider", func(t *testing.T) {
+		manager := NewWriteableManager(nil)
+
+		provider := newManagerMockProvider("aws")
+		err := manager.RegisterProvider("aws", provider)
+		require.NoError(t, err)
+
+		ref := SecretRef{Path: "test/path"}
+		value := []byte("test-value")
+
+		err = manager.StoreIn(context.Background(), "aws", ref, value)
+		assert.NoError(t, err)
+
+		// Verify the value was stored
+		provider.mu.RLock()
+		storedValue := provider.storedSecrets[ref.Path]
+		provider.mu.RUnlock()
+		assert.Equal(t, value, storedValue)
+	})
+
+	t.Run("store with provider error", func(t *testing.T) {
+		manager := NewWriteableManager(&Config{
+			DefaultProvider: "test-provider",
+		})
+
+		provider := newManagerMockProvider("test-provider")
+		provider.storeError = errors.New("store failed")
+		err := manager.RegisterProvider("test-provider", provider)
+		require.NoError(t, err)
+
+		ref := SecretRef{Path: "test/path"}
+		value := []byte("test-value")
+
+		err = manager.Store(context.Background(), ref, value)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "store failed")
+	})
+
+	t.Run("store with audit logging", func(t *testing.T) {
+		auditLogger := &managerMockAuditLogger{}
+		manager := NewWriteableManager(&Config{
+			DefaultProvider: "test-provider",
+			EnableAudit:     true,
+			AuditLogger:     auditLogger,
+		})
+
+		provider := newManagerMockProvider("test-provider")
+		err := manager.RegisterProvider("test-provider", provider)
+		require.NoError(t, err)
+
+		ref := SecretRef{Path: "test/path"}
+		value := []byte("test-value")
+
+		err = manager.Store(context.Background(), ref, value)
+		assert.NoError(t, err)
+
+		// Check audit logs
+		logs := auditLogger.GetLogs()
+		assert.Len(t, logs, 1)
+		assert.Equal(t, "store", logs[0].Action)
+		assert.True(t, logs[0].Success)
+	})
+}
+
+func TestWriteableManager_Delete(t *testing.T) {
+	t.Run("successful delete", func(t *testing.T) {
+		manager := NewWriteableManager(&Config{
+			DefaultProvider: "test-provider",
+		})
+
+		provider := newManagerMockProvider("test-provider")
+		// Pre-populate a secret
+		provider.storedSecrets["test/path"] = []byte("test-value")
+		err := manager.RegisterProvider("test-provider", provider)
+		require.NoError(t, err)
+
+		ref := SecretRef{Path: "test/path"}
+
+		err = manager.Delete(context.Background(), ref)
+		assert.NoError(t, err)
+
+		// Verify the value was deleted
+		provider.mu.RLock()
+		_, exists := provider.storedSecrets[ref.Path]
+		provider.mu.RUnlock()
+		assert.False(t, exists)
+	})
+
+	t.Run("delete with non-writeable provider", func(t *testing.T) {
+		manager := NewWriteableManager(&Config{
+			DefaultProvider: "test-provider",
+		})
+
+		// Create a provider that doesn't implement WriteableProvider
+		basicProvider := &struct {
+			Provider
+		}{
+			Provider: newManagerMockProvider("basic"),
+		}
+
+		err := manager.RegisterProvider("test-provider", basicProvider)
+		require.NoError(t, err)
+
+		ref := SecretRef{Path: "test/path"}
+
+		err = manager.Delete(context.Background(), ref)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "does not support write operations")
+	})
+
+	t.Run("delete with specific provider", func(t *testing.T) {
+		manager := NewWriteableManager(nil)
+
+		provider := newManagerMockProvider("aws")
+		provider.storedSecrets["test/path"] = []byte("test-value")
+		err := manager.RegisterProvider("aws", provider)
+		require.NoError(t, err)
+
+		ref := SecretRef{Path: "test/path"}
+
+		err = manager.DeleteFrom(context.Background(), "aws", ref)
+		assert.NoError(t, err)
+
+		// Verify the value was deleted
+		provider.mu.RLock()
+		_, exists := provider.storedSecrets[ref.Path]
+		provider.mu.RUnlock()
+		assert.False(t, exists)
+	})
+
+	t.Run("delete with provider error", func(t *testing.T) {
+		manager := NewWriteableManager(&Config{
+			DefaultProvider: "test-provider",
+		})
+
+		provider := newManagerMockProvider("test-provider")
+		provider.deleteError = errors.New("delete failed")
+		err := manager.RegisterProvider("test-provider", provider)
+		require.NoError(t, err)
+
+		ref := SecretRef{Path: "test/path"}
+
+		err = manager.Delete(context.Background(), ref)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "delete failed")
+	})
+}
+
+func TestRotatableManager_Rotate(t *testing.T) {
+	t.Run("successful rotate", func(t *testing.T) {
+		manager := NewRotatableManager(&Config{
+			DefaultProvider: "test-provider",
+		})
+
+		provider := newManagerMockProvider("test-provider")
+		provider.rotateResult = &Secret{
+			Value:   []byte("new-secret-value"),
+			Version: "v2",
+		}
+		err := manager.RegisterProvider("test-provider", provider)
+		require.NoError(t, err)
+
+		ref := SecretRef{Path: "test/path"}
+
+		secret, err := manager.Rotate(context.Background(), ref)
+		assert.NoError(t, err)
+		assert.NotNil(t, secret)
+		assert.Equal(t, []byte("new-secret-value"), secret.Value)
+		assert.Equal(t, "v2", secret.Version)
+	})
+
+	t.Run("rotate with non-rotatable provider", func(t *testing.T) {
+		manager := NewRotatableManager(&Config{
+			DefaultProvider: "test-provider",
+		})
+
+		// Create a provider that doesn't implement RotatableProvider
+		// We can't use our managerMockProvider directly since it implements Rotate
+		// So we'll create a minimal provider that only implements basic Provider interface
+		basicProvider := &struct {
+			Provider
+		}{
+			Provider: &managerMockProvider{
+				name: "basic",
+				resolveResult: &Secret{
+					Value:   []byte("test"),
+					Version: "v1",
+				},
+			},
+		}
+
+		err := manager.RegisterProvider("test-provider", basicProvider)
+		require.NoError(t, err)
+
+		ref := SecretRef{Path: "test/path"}
+
+		secret, err := manager.Rotate(context.Background(), ref)
+		assert.Error(t, err)
+		assert.Nil(t, secret)
+		assert.Contains(t, err.Error(), "does not support rotation operations")
+	})
+
+	t.Run("rotate with specific provider", func(t *testing.T) {
+		manager := NewRotatableManager(nil)
+
+		provider := newManagerMockProvider("vault")
+		provider.rotateResult = &Secret{
+			Value:   []byte("rotated-secret"),
+			Version: "v3",
+		}
+		err := manager.RegisterProvider("vault", provider)
+		require.NoError(t, err)
+
+		ref := SecretRef{Path: "test/path"}
+
+		secret, err := manager.RotateIn(context.Background(), "vault", ref)
+		assert.NoError(t, err)
+		assert.NotNil(t, secret)
+		assert.Equal(t, []byte("rotated-secret"), secret.Value)
+		assert.Equal(t, "v3", secret.Version)
+	})
+
+	t.Run("rotate with provider error", func(t *testing.T) {
+		manager := NewRotatableManager(&Config{
+			DefaultProvider: "test-provider",
+		})
+
+		provider := newManagerMockProvider("test-provider")
+		provider.rotateError = errors.New("rotation failed")
+		err := manager.RegisterProvider("test-provider", provider)
+		require.NoError(t, err)
+
+		ref := SecretRef{Path: "test/path"}
+
+		secret, err := manager.Rotate(context.Background(), ref)
+		assert.Error(t, err)
+		assert.Nil(t, secret)
+		assert.Contains(t, err.Error(), "rotation failed")
+	})
+
+	t.Run("rotate with auto-clear", func(t *testing.T) {
+		manager := NewRotatableManager(&Config{
+			DefaultProvider: "test-provider",
+			AutoClear:       true,
+		})
+
+		provider := newManagerMockProvider("test-provider")
+		provider.rotateResult = &Secret{
+			Value:     []byte("new-secret"),
+			Version:   "v2",
+			AutoClear: false, // Provider returns false
+		}
+		err := manager.RegisterProvider("test-provider", provider)
+		require.NoError(t, err)
+
+		ref := SecretRef{Path: "test/path"}
+
+		secret, err := manager.Rotate(context.Background(), ref)
+		assert.NoError(t, err)
+		assert.NotNil(t, secret)
+		assert.True(t, secret.AutoClear) // Manager should override with its config
+	})
+
+	t.Run("rotate with audit logging", func(t *testing.T) {
+		auditLogger := &managerMockAuditLogger{}
+		manager := NewRotatableManager(&Config{
+			DefaultProvider: "test-provider",
+			EnableAudit:     true,
+			AuditLogger:     auditLogger,
+		})
+
+		provider := newManagerMockProvider("test-provider")
+		provider.rotateResult = &Secret{
+			Value:   []byte("rotated-value"),
+			Version: "v2",
+		}
+		err := manager.RegisterProvider("test-provider", provider)
+		require.NoError(t, err)
+
+		ref := SecretRef{Path: "test/path"}
+
+		secret, err := manager.Rotate(context.Background(), ref)
+		assert.NoError(t, err)
+		assert.NotNil(t, secret)
+
+		// Check audit logs
+		logs := auditLogger.GetLogs()
+		assert.Len(t, logs, 1)
+		assert.Equal(t, "rotate", logs[0].Action)
+		assert.True(t, logs[0].Success)
+	})
+}
+
+func TestManagerInheritance(t *testing.T) {
+	t.Run("WriteableManager inherits Manager methods", func(t *testing.T) {
+		manager := NewWriteableManager(&Config{
+			DefaultProvider: "test-provider",
+		})
+
+		provider := newManagerMockProvider("test-provider")
+		provider.resolveResult = &Secret{
+			Value:   []byte("test-value"),
+			Version: "v1",
+		}
+		err := manager.RegisterProvider("test-provider", provider)
+		require.NoError(t, err)
+
+		// Test that WriteableManager can still resolve secrets
+		ref := SecretRef{Path: "test/path"}
+		secret, err := manager.Resolve(context.Background(), ref)
+		assert.NoError(t, err)
+		assert.NotNil(t, secret)
+		assert.Equal(t, []byte("test-value"), secret.Value)
+	})
+
+	t.Run("RotatableManager inherits WriteableManager methods", func(t *testing.T) {
+		manager := NewRotatableManager(&Config{
+			DefaultProvider: "test-provider",
+		})
+
+		provider := newManagerMockProvider("test-provider")
+		err := manager.RegisterProvider("test-provider", provider)
+		require.NoError(t, err)
+
+		// Test that RotatableManager can store secrets
+		ref := SecretRef{Path: "test/path"}
+		value := []byte("test-value")
+
+		err = manager.Store(context.Background(), ref, value)
+		assert.NoError(t, err)
+
+		// Test that RotatableManager can delete secrets
+		err = manager.Delete(context.Background(), ref)
+		assert.NoError(t, err)
+
+		// Test that RotatableManager can resolve secrets
+		provider.resolveResult = &Secret{
+			Value:   []byte("resolved-value"),
+			Version: "v1",
+		}
+		secret, err := manager.Resolve(context.Background(), ref)
+		assert.NoError(t, err)
+		assert.NotNil(t, secret)
+	})
 }

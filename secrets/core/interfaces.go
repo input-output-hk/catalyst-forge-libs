@@ -52,8 +52,15 @@ type WriteableProvider interface {
 
 	// Delete removes a secret from the provider.
 	Delete(ctx context.Context, ref SecretRef) error
+}
+
+// RotatableProvider extends WriteableProvider with rotation capabilities.
+// Only providers that can generate new secret values should implement this interface.
+type RotatableProvider interface {
+	WriteableProvider
 
 	// Rotate creates a new version of the secret and returns it.
 	// The old version should remain accessible until cleanup.
+	// The provider is responsible for determining the format and content of the new secret.
 	Rotate(ctx context.Context, ref SecretRef) (*Secret, error)
 }

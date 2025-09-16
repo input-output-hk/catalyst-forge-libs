@@ -1,4 +1,4 @@
-// Package secrets provides error types and handling for the secrets management module.
+// Package core provides error types and handling for the secrets management module.
 //
 // Error handling follows Go best practices with wrapped errors for context preservation.
 // All errors defined here can be unwrapped using errors.Is() and errors.As().

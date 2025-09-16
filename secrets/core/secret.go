@@ -1,4 +1,4 @@
-// Package secrets provides secure, provider-agnostic secrets management
+// Package core provides secure, provider-agnostic secrets management
 // with automatic memory cleanup and just-in-time resolution.
 //
 // # Basic Usage

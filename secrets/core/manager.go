@@ -1,4 +1,4 @@
-// Package secrets provides secure, provider-agnostic secrets management
+// Package core provides secure, provider-agnostic secrets management
 // with automatic memory cleanup and just-in-time resolution.
 package core
 
@@ -266,4 +266,225 @@ func (m *Manager) Close() error {
 
 	// Return aggregated error
 	return fmt.Errorf("errors during shutdown: %v", errs)
+}
+
+// WriteableManager extends Manager with write operations for secrets.
+// It provides Store and Delete operations for providers that support them.
+type WriteableManager struct {
+	*Manager
+}
+
+// NewWriteableManager creates a new WriteableManager with the provided configuration.
+func NewWriteableManager(config *Config) *WriteableManager {
+	return &WriteableManager{
+		Manager: NewManager(config),
+	}
+}
+
+// Store saves a secret value using the default provider.
+// Returns an error if the provider doesn't support write operations.
+func (m *WriteableManager) Store(ctx context.Context, ref SecretRef, value []byte) error {
+	if m.defaultProvider == "" {
+		return fmt.Errorf("no default provider configured")
+	}
+
+	return m.StoreIn(ctx, m.defaultProvider, ref, value)
+}
+
+// StoreIn saves a secret value using a specific provider.
+// Returns an error if the provider doesn't exist or doesn't support write operations.
+func (m *WriteableManager) StoreIn(
+	ctx context.Context,
+	providerName string,
+	ref SecretRef,
+	value []byte,
+) error {
+	if providerName == "" {
+		return fmt.Errorf("provider name cannot be empty")
+	}
+
+	m.mu.RLock()
+	provider, exists := m.providers[providerName]
+	m.mu.RUnlock()
+
+	if !exists {
+		if m.enableAudit && m.auditLogger != nil {
+			m.auditLogger.LogAccess(
+				ctx,
+				"store",
+				ref,
+				false,
+				fmt.Errorf("provider %q not found", providerName),
+			)
+		}
+		return fmt.Errorf("provider %q not found", providerName)
+	}
+
+	// Check if provider supports write operations
+	writeableProvider, ok := provider.(WriteableProvider)
+	if !ok {
+		err := fmt.Errorf("provider %q does not support write operations", providerName)
+		if m.enableAudit && m.auditLogger != nil {
+			m.auditLogger.LogAccess(ctx, "store", ref, false, err)
+		}
+		return err
+	}
+
+	err := writeableProvider.Store(ctx, ref, value)
+
+	// Handle audit logging
+	if m.enableAudit && m.auditLogger != nil {
+		success := err == nil
+		m.auditLogger.LogAccess(ctx, "store", ref, success, err)
+	}
+
+	if err != nil {
+		return WrapProviderError(providerName, ref, err, "failed to store secret")
+	}
+
+	return nil
+}
+
+// Delete removes a secret using the default provider.
+// Returns an error if the provider doesn't support write operations.
+func (m *WriteableManager) Delete(ctx context.Context, ref SecretRef) error {
+	if m.defaultProvider == "" {
+		return fmt.Errorf("no default provider configured")
+	}
+
+	return m.DeleteFrom(ctx, m.defaultProvider, ref)
+}
+
+// DeleteFrom removes a secret using a specific provider.
+// Returns an error if the provider doesn't exist or doesn't support write operations.
+func (m *WriteableManager) DeleteFrom(
+	ctx context.Context,
+	providerName string,
+	ref SecretRef,
+) error {
+	if providerName == "" {
+		return fmt.Errorf("provider name cannot be empty")
+	}
+
+	m.mu.RLock()
+	provider, exists := m.providers[providerName]
+	m.mu.RUnlock()
+
+	if !exists {
+		if m.enableAudit && m.auditLogger != nil {
+			m.auditLogger.LogAccess(
+				ctx,
+				"delete",
+				ref,
+				false,
+				fmt.Errorf("provider %q not found", providerName),
+			)
+		}
+		return fmt.Errorf("provider %q not found", providerName)
+	}
+
+	// Check if provider supports write operations
+	writeableProvider, ok := provider.(WriteableProvider)
+	if !ok {
+		err := fmt.Errorf("provider %q does not support write operations", providerName)
+		if m.enableAudit && m.auditLogger != nil {
+			m.auditLogger.LogAccess(ctx, "delete", ref, false, err)
+		}
+		return err
+	}
+
+	err := writeableProvider.Delete(ctx, ref)
+
+	// Handle audit logging
+	if m.enableAudit && m.auditLogger != nil {
+		success := err == nil
+		m.auditLogger.LogAccess(ctx, "delete", ref, success, err)
+	}
+
+	if err != nil {
+		return WrapProviderError(providerName, ref, err, "failed to delete secret")
+	}
+
+	return nil
+}
+
+// RotatableManager extends WriteableManager with rotation capabilities for secrets.
+// It provides Rotate operations for providers that support them.
+type RotatableManager struct {
+	*WriteableManager
+}
+
+// NewRotatableManager creates a new RotatableManager with the provided configuration.
+func NewRotatableManager(config *Config) *RotatableManager {
+	return &RotatableManager{
+		WriteableManager: NewWriteableManager(config),
+	}
+}
+
+// Rotate creates a new version of a secret using the default provider.
+// Returns the new secret or an error if the provider doesn't support rotation.
+func (m *RotatableManager) Rotate(ctx context.Context, ref SecretRef) (*Secret, error) {
+	if m.defaultProvider == "" {
+		return nil, fmt.Errorf("no default provider configured")
+	}
+
+	return m.RotateIn(ctx, m.defaultProvider, ref)
+}
+
+// RotateIn creates a new version of a secret using a specific provider.
+// Returns the new secret or an error if the provider doesn't exist or doesn't support rotation.
+func (m *RotatableManager) RotateIn(
+	ctx context.Context,
+	providerName string,
+	ref SecretRef,
+) (*Secret, error) {
+	if providerName == "" {
+		return nil, fmt.Errorf("provider name cannot be empty")
+	}
+
+	m.mu.RLock()
+	provider, exists := m.providers[providerName]
+	m.mu.RUnlock()
+
+	if !exists {
+		if m.enableAudit && m.auditLogger != nil {
+			m.auditLogger.LogAccess(
+				ctx,
+				"rotate",
+				ref,
+				false,
+				fmt.Errorf("provider %q not found", providerName),
+			)
+		}
+		return nil, fmt.Errorf("provider %q not found", providerName)
+	}
+
+	// Check if provider supports rotation operations
+	rotatableProvider, ok := provider.(RotatableProvider)
+	if !ok {
+		err := fmt.Errorf("provider %q does not support rotation operations", providerName)
+		if m.enableAudit && m.auditLogger != nil {
+			m.auditLogger.LogAccess(ctx, "rotate", ref, false, err)
+		}
+		return nil, err
+	}
+
+	secret, err := rotatableProvider.Rotate(ctx, ref)
+
+	// Handle audit logging
+	if m.enableAudit && m.auditLogger != nil {
+		success := err == nil
+		m.auditLogger.LogAccess(ctx, "rotate", ref, success, err)
+	}
+
+	// Apply AutoClear setting from manager config if secret was successfully rotated
+	if err == nil && secret != nil {
+		secret.AutoClear = m.autoClear
+	}
+
+	if err != nil {
+		return nil, WrapProviderError(providerName, ref, err, "failed to rotate secret")
+	}
+
+	return secret, nil
 }
