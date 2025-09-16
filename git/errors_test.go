@@ -3,6 +3,9 @@ package git
 import (
 	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSentinelErrors_Is(t *testing.T) {
@@ -12,6 +15,7 @@ func TestSentinelErrors_Is(t *testing.T) {
 		target   error
 		expected bool
 	}{
+		// Direct sentinel errors
 		{"ErrAlreadyUpToDate direct", ErrAlreadyUpToDate, ErrAlreadyUpToDate, true},
 		{"ErrAuthRequired direct", ErrAuthRequired, ErrAuthRequired, true},
 		{"ErrAuthFailed direct", ErrAuthFailed, ErrAuthFailed, true},
@@ -24,16 +28,16 @@ func TestSentinelErrors_Is(t *testing.T) {
 		{"ErrInvalidRef direct", ErrInvalidRef, ErrInvalidRef, true},
 		{"ErrResolveFailed direct", ErrResolveFailed, ErrResolveFailed, true},
 
-		// Test wrapped errors
+		// Wrapped errors
 		{"ErrAlreadyUpToDate wrapped", WrapError(ErrAlreadyUpToDate, "context"), ErrAlreadyUpToDate, true},
 		{"ErrAuthRequired wrapped", WrapError(ErrAuthRequired, "context"), ErrAuthRequired, true},
 		{"ErrBranchExists wrapped", WrapErrorf(ErrBranchExists, "context %s", "arg"), ErrBranchExists, true},
 
-		// Test non-matching errors
+		// Non-matching errors
 		{"ErrAlreadyUpToDate vs ErrAuthRequired", ErrAlreadyUpToDate, ErrAuthRequired, false},
 		{"ErrBranchExists vs ErrTagExists", ErrBranchExists, ErrTagExists, false},
 
-		// Test nil handling
+		// Nil handling
 		{"WrapError with nil", WrapError(nil, "context"), ErrAlreadyUpToDate, false},
 		{"WrapErrorf with nil", WrapErrorf(nil, "context"), ErrAlreadyUpToDate, false},
 	}
@@ -41,9 +45,8 @@ func TestSentinelErrors_Is(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := errors.Is(tt.err, tt.target)
-			if result != tt.expected {
-				t.Errorf("errors.Is(%v, %v) = %v; want %v", tt.err, tt.target, result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result,
+				"errors.Is(%v, %v) should be %v", tt.err, tt.target, tt.expected)
 		})
 	}
 }
@@ -56,44 +59,40 @@ func TestWrapError(t *testing.T) {
 		expected string
 	}{
 		{
-			"wrap ErrAlreadyUpToDate",
-			ErrAlreadyUpToDate,
-			"operation failed",
-			"operation failed: already up to date",
+			name:     "wrap ErrAlreadyUpToDate",
+			err:      ErrAlreadyUpToDate,
+			msg:      "operation failed",
+			expected: "operation failed: already up to date",
 		},
 		{
-			"wrap ErrAuthRequired",
-			ErrAuthRequired,
-			"authentication needed",
-			"authentication needed: authentication required",
+			name:     "wrap ErrAuthRequired",
+			err:      ErrAuthRequired,
+			msg:      "authentication needed",
+			expected: "authentication needed: authentication required",
 		},
-		{"wrap nil error", nil, "context", ""},
+		{
+			name:     "wrap nil error",
+			err:      nil,
+			msg:      "context",
+			expected: "",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			wrapped := WrapError(tt.err, tt.msg)
+
 			if tt.err == nil {
-				if wrapped != nil {
-					t.Errorf("WrapError(nil, %q) = %v; want nil", tt.msg, wrapped)
-				}
+				assert.Nil(t, wrapped, "WrapError(nil) should return nil")
 				return
 			}
 
-			if wrapped == nil {
-				t.Errorf("WrapError(%v, %q) = nil; want non-nil", tt.err, tt.msg)
-				return
-			}
-
-			if wrapped.Error() != tt.expected {
-				t.Errorf("WrapError(%v, %q).Error() = %q; want %q",
-					tt.err, tt.msg, wrapped.Error(), tt.expected)
-			}
+			require.NotNil(t, wrapped, "WrapError(%v) should not return nil", tt.err)
+			assert.Equal(t, tt.expected, wrapped.Error())
 
 			// Verify the original error is still detectable
-			if !errors.Is(wrapped, tt.err) {
-				t.Errorf("errors.Is(wrapped, original) = false; want true")
-			}
+			assert.True(t, errors.Is(wrapped, tt.err),
+				"wrapped error should match original sentinel")
 		})
 	}
 }
@@ -103,50 +102,47 @@ func TestWrapErrorf(t *testing.T) {
 		name     string
 		err      error
 		format   string
-		args     []interface{}
+		args     []any
 		expected string
 	}{
 		{
-			"wrap with format",
-			ErrBranchExists,
-			"branch %s",
-			[]interface{}{"main"},
-			"branch main: branch already exists",
+			name:     "wrap with format",
+			err:      ErrBranchExists,
+			format:   "branch %s",
+			args:     []any{"main"},
+			expected: "branch main: branch already exists",
 		},
 		{
-			"wrap with multiple args",
-			ErrTagMissing,
-			"tag %s in %s",
-			[]interface{}{"v1.0", "repo"},
-			"tag v1.0 in repo: tag does not exist",
+			name:     "wrap with multiple args",
+			err:      ErrTagMissing,
+			format:   "tag %s in %s",
+			args:     []any{"v1.0", "repo"},
+			expected: "tag v1.0 in repo: tag does not exist",
 		},
-		{"wrap nil error", nil, "context %s", []interface{}{"arg"}, ""},
+		{
+			name:     "wrap nil error",
+			err:      nil,
+			format:   "context %s",
+			args:     []any{"arg"},
+			expected: "",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			wrapped := WrapErrorf(tt.err, tt.format, tt.args...)
+
 			if tt.err == nil {
-				if wrapped != nil {
-					t.Errorf("WrapErrorf(nil, %q, %v) = %v; want nil", tt.format, tt.args, wrapped)
-				}
+				assert.Nil(t, wrapped, "WrapErrorf(nil) should return nil")
 				return
 			}
 
-			if wrapped == nil {
-				t.Errorf("WrapErrorf(%v, %q, %v) = nil; want non-nil", tt.err, tt.format, tt.args)
-				return
-			}
-
-			if wrapped.Error() != tt.expected {
-				t.Errorf("WrapErrorf(%v, %q, %v).Error() = %q; want %q",
-					tt.err, tt.format, tt.args, wrapped.Error(), tt.expected)
-			}
+			require.NotNil(t, wrapped, "WrapErrorf(%v) should not return nil", tt.err)
+			assert.Equal(t, tt.expected, wrapped.Error())
 
 			// Verify the original error is still detectable
-			if !errors.Is(wrapped, tt.err) {
-				t.Errorf("errors.Is(wrapped, original) = false; want true")
-			}
+			assert.True(t, errors.Is(wrapped, tt.err),
+				"wrapped error should match original sentinel")
 		})
 	}
 }
