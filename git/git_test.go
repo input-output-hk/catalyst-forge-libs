@@ -428,7 +428,10 @@ func TestCurrentBranch_DefaultBranch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
-	testFile.Write([]byte("test content"))
+	_, err = testFile.Write([]byte("test content"))
+	if err != nil {
+		t.Fatalf("Failed to write test file: %v", err)
+	}
 	testFile.Close()
 
 	// Create an initial commit to establish HEAD
@@ -473,7 +476,10 @@ func TestCurrentBranch_DetachedHead(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
-	testFile.Write([]byte("test content"))
+	_, err = testFile.Write([]byte("test content"))
+	if err != nil {
+		t.Fatalf("Failed to write test file: %v", err)
+	}
 	testFile.Close()
 
 	// Create an initial commit
@@ -527,7 +533,10 @@ func TestCreateBranch_FromMaster(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
-	testFile.Write([]byte("test content"))
+	_, err = testFile.Write([]byte("test content"))
+	if err != nil {
+		t.Fatalf("Failed to write test file: %v", err)
+	}
 	testFile.Close()
 
 	// Create an initial commit
@@ -589,7 +598,10 @@ func TestCreateBranch_AlreadyExists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
-	testFile.Write([]byte("test content"))
+	_, err = testFile.Write([]byte("test content"))
+	if err != nil {
+		t.Fatalf("Failed to write test file: %v", err)
+	}
 	testFile.Close()
 
 	// Create an initial commit
@@ -642,7 +654,10 @@ func TestCreateBranch_ForceOverwrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
-	testFile.Write([]byte("test content"))
+	_, err = testFile.Write([]byte("test content"))
+	if err != nil {
+		t.Fatalf("Failed to write test file: %v", err)
+	}
 	testFile.Close()
 
 	// Create an initial commit
@@ -857,7 +872,10 @@ func TestCheckoutBranch_CreateIfMissing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
-	testFile.Write([]byte("test content"))
+	_, err = testFile.Write([]byte("test content"))
+	if err != nil {
+		t.Fatalf("Failed to write test file: %v", err)
+	}
 	testFile.Close()
 
 	// Create an initial commit
@@ -919,7 +937,10 @@ func TestCheckoutBranch_BranchMissing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
-	testFile.Write([]byte("test content"))
+	_, err = testFile.Write([]byte("test content"))
+	if err != nil {
+		t.Fatalf("Failed to write test file: %v", err)
+	}
 	testFile.Close()
 
 	// Create an initial commit
@@ -992,7 +1013,10 @@ func TestCheckoutBranch_ForceCheckout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
-	testFile.Write([]byte("initial content"))
+	_, err = testFile.Write([]byte("initial content"))
+	if err != nil {
+		t.Fatalf("Failed to write test file: %v", err)
+	}
 	testFile.Close()
 
 	// Create an initial commit
@@ -1020,7 +1044,7 @@ func TestCheckoutBranch_ForceCheckout(t *testing.T) {
 	}
 
 	// Make some uncommitted changes
-	testFile2, err := memFS.OpenFile("test.txt", os.O_RDWR|os.O_TRUNC, 0666)
+	testFile2, err := memFS.OpenFile("test.txt", os.O_RDWR|os.O_TRUNC, 0o666)
 	if err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}

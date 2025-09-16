@@ -257,9 +257,9 @@ func Init(ctx context.Context, opts *Options) (*Repo, error) {
 		worktreeFS = nil
 	} else {
 		// For non-bare repos, storage goes in .git subdirectory
-		dotGitFS, err := scopedFS.Chroot(".git")
-		if err != nil {
-			return nil, fmt.Errorf("failed to create .git directory: %w", err)
+		dotGitFS, chrootErr := scopedFS.Chroot(".git")
+		if chrootErr != nil {
+			return nil, fmt.Errorf("failed to create .git directory: %w", chrootErr)
 		}
 		storage = fsbridge.NewStorage(dotGitFS, opts.StorerCacheSize)
 		worktreeFS = scopedFS
@@ -416,7 +416,7 @@ func (r *Repo) CheckoutBranch(ctx context.Context, name string, createIfMissing,
 		if setErr := r.repo.Storer.SetReference(symbolicRef); setErr != nil {
 			// If we can't set symbolic reference, at least try to set a direct reference
 			if currentHead != nil {
-				r.repo.Storer.SetReference(currentHead)
+				_ = r.repo.Storer.SetReference(currentHead)
 			}
 			return WrapError(setErr, "failed to restore HEAD after checkout")
 		}
@@ -548,9 +548,9 @@ func Open(ctx context.Context, opts *Options) (*Repo, error) {
 		worktreeFS = nil
 	} else {
 		// For non-bare repos, storage goes in .git subdirectory
-		dotGitFS, err := scopedFS.Chroot(".git")
-		if err != nil {
-			return nil, fmt.Errorf("failed to access .git directory: %w", err)
+		dotGitFS, chrootErr := scopedFS.Chroot(".git")
+		if chrootErr != nil {
+			return nil, fmt.Errorf("failed to access .git directory: %w", chrootErr)
 		}
 		storage = fsbridge.NewStorage(dotGitFS, opts.StorerCacheSize)
 		worktreeFS = scopedFS
@@ -620,9 +620,9 @@ func Clone(ctx context.Context, remoteURL string, opts *Options) (*Repo, error) 
 		worktreeFS = nil
 	} else {
 		// For non-bare repos, storage goes in .git subdirectory
-		dotGitFS, err := scopedFS.Chroot(".git")
-		if err != nil {
-			return nil, fmt.Errorf("failed to create .git directory: %w", err)
+		dotGitFS, chrootErr := scopedFS.Chroot(".git")
+		if chrootErr != nil {
+			return nil, fmt.Errorf("failed to create .git directory: %w", chrootErr)
 		}
 		storage = fsbridge.NewStorage(dotGitFS, opts.StorerCacheSize)
 		worktreeFS = scopedFS
