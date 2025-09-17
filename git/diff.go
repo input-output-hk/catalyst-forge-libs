@@ -213,4 +213,3 @@ func ChangeExcludePathFilter(path string) ChangeFilter {
 		return !includeFilter(change) // Invert the path filter
 	}
 }
-

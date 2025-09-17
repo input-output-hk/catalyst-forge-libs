@@ -242,4 +242,3 @@ func (a *authorFilteredCommitIter) ForEach(fn func(*object.Commit) error) error 
 func (a *authorFilteredCommitIter) Close() {
 	a.iter.Close()
 }
-

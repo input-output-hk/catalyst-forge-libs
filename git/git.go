@@ -315,8 +315,6 @@ func Clone(ctx context.Context, remoteURL string, opts *Options) (*Repo, error) 
 
 // AuthProvider resolves authentication methods for git operations.
 // Implementations should handle different URL schemes and credential sources.
-//
-//go:generate mockery --name=AuthProvider --output=../mocks
 type AuthProvider interface {
 	// Method returns the appropriate transport.AuthMethod for the given remote URL.
 	// Returns nil if no authentication is needed/available for this URL.

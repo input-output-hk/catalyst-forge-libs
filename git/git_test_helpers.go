@@ -3,8 +3,8 @@ package git
 import (
 	"context"
 	"testing"
+	"time"
 
-	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/input-output-hk/catalyst-forge-libs/fs"
 	fsb "github.com/input-output-hk/catalyst-forge-libs/fs/billy"
@@ -62,7 +62,11 @@ func setupTestRepoWithCommit(t *testing.T) *testRepo {
 	_, err = tr.repo.worktree.Add("test.txt")
 	require.NoError(t, err, "failed to add test file")
 
-	_, err = tr.repo.worktree.Commit("Initial commit", &git.CommitOptions{})
+	_, err = tr.repo.Commit(tr.ctx, "Initial commit", Signature{
+		Name:  "Test",
+		Email: "test@example.com",
+		When:  time.Now(),
+	}, CommitOpts{})
 	require.NoError(t, err, "failed to create initial commit")
 
 	return tr

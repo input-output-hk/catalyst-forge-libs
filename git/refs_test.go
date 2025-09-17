@@ -30,7 +30,7 @@ func TestRefs(t *testing.T) {
 				require.NoError(t, err)
 				return tr
 			},
-			expected: []string{"bugfix-branch", "feature-branch", "master"},
+			expected: []string{"refs/heads/bugfix-branch", "refs/heads/feature-branch", "refs/heads/master"},
 		},
 		{
 			name:    "list branches with pattern",
@@ -46,7 +46,7 @@ func TestRefs(t *testing.T) {
 				require.NoError(t, err)
 				return tr
 			},
-			expected: []string{"feature-one", "feature-two"},
+			expected: []string{"refs/heads/feature-one", "refs/heads/feature-two"},
 		},
 		{
 			name: "list tags",
@@ -59,7 +59,7 @@ func TestRefs(t *testing.T) {
 				require.NoError(t, err)
 				return tr
 			},
-			expected: []string{"v1.0.0", "v1.1.0"},
+			expected: []string{"refs/tags/v1.0.0", "refs/tags/v1.1.0"},
 		},
 		{
 			name:    "list tags with pattern",
@@ -75,7 +75,7 @@ func TestRefs(t *testing.T) {
 				require.NoError(t, err)
 				return tr
 			},
-			expected: []string{"v1.0.0", "v1.1.0"},
+			expected: []string{"refs/tags/v1.0.0", "refs/tags/v1.1.0"},
 		},
 		{
 			name: "list remote branches",
@@ -87,7 +87,11 @@ func TestRefs(t *testing.T) {
 				tr.createRemoteBranch(t, "upstream", "master")
 				return tr
 			},
-			expected: []string{"origin/develop", "origin/main", "upstream/master"},
+			expected: []string{
+				"refs/remotes/origin/develop",
+				"refs/remotes/origin/main",
+				"refs/remotes/upstream/master",
+			},
 		},
 		{
 			name:    "list remote branches with pattern",
@@ -100,7 +104,7 @@ func TestRefs(t *testing.T) {
 				tr.createRemoteBranch(t, "upstream", "master")
 				return tr
 			},
-			expected: []string{"origin/develop", "origin/main"},
+			expected: []string{"refs/remotes/origin/develop", "refs/remotes/origin/main"},
 		},
 		{
 			name: "list other references",
@@ -184,7 +188,7 @@ func TestResolve(t *testing.T) {
 			name:           "resolve HEAD",
 			revision:       "HEAD",
 			setup:          setupTestRepoWithCommit,
-			expectedKind:   RefOther,
+			expectedKind:   RefCommit,
 			expectedPrefix: "HEAD",
 		},
 		{

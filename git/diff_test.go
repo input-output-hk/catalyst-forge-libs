@@ -3,8 +3,8 @@ package git
 import (
 	"context"
 	"testing"
+	"time"
 
-	"github.com/go-git/go-git/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,7 +29,12 @@ func TestDiff(t *testing.T) {
 				tr.modifyTestFile(t, "modified content")
 				_, err := tr.repo.worktree.Add("test.txt")
 				require.NoError(t, err)
-				_, err = tr.repo.worktree.Commit("Second commit", &git.CommitOptions{})
+				_, err = tr.repo.Commit(
+					tr.ctx,
+					"Second commit",
+					Signature{Name: "Test", Email: "test@example.com", When: time.Now()},
+					CommitOpts{},
+				)
 				require.NoError(t, err)
 
 				return tr
@@ -63,7 +68,12 @@ func TestDiff(t *testing.T) {
 				_, err = tr.repo.worktree.Add("file2.md")
 				require.NoError(t, err)
 
-				_, err = tr.repo.worktree.Commit("Add multiple files", &git.CommitOptions{})
+				_, err = tr.repo.Commit(
+					tr.ctx,
+					"Add multiple files",
+					Signature{Name: "Test", Email: "test@example.com", When: time.Now()},
+					CommitOpts{},
+				)
 				require.NoError(t, err)
 
 				return tr
@@ -101,4 +111,3 @@ func TestDiff(t *testing.T) {
 		})
 	}
 }
-

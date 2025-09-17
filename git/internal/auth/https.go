@@ -60,7 +60,7 @@ func (p *HTTPSAuthProvider) WithAllowedHosts(hosts ...string) *HTTPSAuthProvider
 // Method returns the authentication method for the given remote URL.
 // Returns nil if the URL doesn't match allowed patterns.
 //
-//nolint:ireturn // transport.AuthMethod is an interface required by go-git
+//nolint:ireturn // go-git requires returning transport.AuthMethod interface
 func (p *HTTPSAuthProvider) Method(remoteURL string) (transport.AuthMethod, error) {
 	parsedURL, err := url.Parse(remoteURL)
 	if err != nil {

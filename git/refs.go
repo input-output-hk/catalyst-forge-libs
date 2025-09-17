@@ -97,8 +97,8 @@ func (r *Repo) Refs(ctx context.Context, kind RefKind, pattern string) ([]string
 			return nil
 		}
 
-		// Add the short name to results
-		matchingRefs = append(matchingRefs, shortName)
+		// Add the full reference name to results
+		matchingRefs = append(matchingRefs, ref.Name().String())
 		return nil
 	})
 	if err != nil {
@@ -258,9 +258,9 @@ func (r *Repo) classifyResolvedRevision(rev string, hash *plumbing.Hash) (RefKin
 		return RefCommit, hash.String()
 	}
 
-	// Check if it's HEAD
+	// Check if it's HEAD - HEAD always points to a commit
 	if rev == "HEAD" {
-		return RefOther, "HEAD"
+		return RefCommit, "HEAD"
 	}
 
 	// Try to find a reference with this name

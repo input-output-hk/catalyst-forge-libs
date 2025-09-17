@@ -129,24 +129,18 @@ func (r *Repo) Remove(ctx context.Context, paths ...string) error {
 		}
 	}
 
-	// Get current status to check which files are actually tracked
-	currentStatus, err := r.worktree.Status()
-	if err != nil {
-		return WrapError(err, "failed to get worktree status")
-	}
-
 	// Remove each resolved path from the index and worktree
 	for _, path := range pathsToRemove {
-		// Check if file is tracked in the index
-		fileStatus := currentStatus.File(path)
-		if fileStatus.Staging == git.Untracked && fileStatus.Worktree == git.Untracked {
-			// File is not tracked, skip it (matching git rm behavior)
-			continue
-		}
-
+		// Try to remove the file from the index and worktree
+		// go-git's Remove will handle checking if the file is tracked
 		_, err := r.worktree.Remove(path)
 		if err != nil {
-			return WrapErrorf(err, "failed to remove path %q", path)
+			// Only return error if it's not a "entry not found" type error
+			// (matching git rm behavior - silently ignore untracked files)
+			errMsg := err.Error()
+			if !strings.Contains(errMsg, "entry not found") && !strings.Contains(errMsg, "does not exist") {
+				return WrapErrorf(err, "failed to remove path %q", path)
+			}
 		}
 	}
 

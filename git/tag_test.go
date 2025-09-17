@@ -5,8 +5,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -79,7 +79,12 @@ func TestCreateTag(t *testing.T) {
 				tr.modifyTestFile(t, "second commit content")
 				_, err := tr.repo.worktree.Add("test.txt")
 				require.NoError(t, err)
-				_, err = tr.repo.worktree.Commit("Second commit", &git.CommitOptions{})
+				_, err = tr.repo.Commit(
+					tr.ctx,
+					"Second commit",
+					Signature{Name: "Test", Email: "test@example.com", When: time.Now()},
+					CommitOpts{},
+				)
 				require.NoError(t, err)
 
 				return tr

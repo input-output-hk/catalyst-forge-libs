@@ -38,6 +38,11 @@ func (r *Repo) CurrentBranch(ctx context.Context) (string, error) {
 //
 // Context timeout/cancellation is honored during the operation.
 func (r *Repo) CreateBranch(ctx context.Context, name, startRev string, trackRemote, force bool) error {
+	// Check context cancellation
+	if err := ctx.Err(); err != nil {
+		return WrapError(err, "context cancelled")
+	}
+
 	if name == "" {
 		return WrapError(ErrInvalidRef, "branch name cannot be empty")
 	}
@@ -155,22 +160,19 @@ func (r *Repo) DeleteBranch(ctx context.Context, name string) error {
 		return WrapError(ErrInvalidRef, "branch name cannot be empty")
 	}
 
-	// Get the current branch to prevent deletion of current branch
-	currentBranch, err := r.CurrentBranch(ctx)
-	if err != nil {
-		return WrapError(err, "failed to get current branch")
-	}
-
-	if currentBranch == name {
-		return WrapError(ErrBranchExists, "cannot delete the currently checked out branch")
-	}
-
 	branchRefName := plumbing.NewBranchReferenceName(name)
 
-	// Check if branch exists
-	_, err = r.repo.Reference(branchRefName, true)
+	// Check if branch exists first
+	_, err := r.repo.Reference(branchRefName, true)
 	if err != nil {
 		return WrapError(ErrBranchMissing, "branch does not exist")
+	}
+
+	// Get the current branch to prevent deletion of current branch
+	// This might fail in an empty repository, which is okay
+	currentBranch, err := r.CurrentBranch(ctx)
+	if err == nil && currentBranch == name {
+		return WrapError(ErrBranchExists, "cannot delete the currently checked out branch")
 	}
 
 	// Delete the branch

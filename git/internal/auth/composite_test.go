@@ -19,7 +19,7 @@ type mockProvider struct {
 	called    bool
 }
 
-//nolint:ireturn // test mock returns interface
+//nolint:ireturn // test mock returns interface as required by Provider
 func (m *mockProvider) Method(remoteURL string) (transport.AuthMethod, error) {
 	m.called = true
 	if m.shouldErr {

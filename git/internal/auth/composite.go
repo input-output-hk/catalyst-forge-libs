@@ -57,7 +57,7 @@ func (c *CompositeAuthProvider) SetContinueOnError(continueOnError bool) *Compos
 // Method returns the appropriate authentication method for the given remote URL.
 // It tries each configured provider in order until one provides authentication.
 //
-//nolint:ireturn // transport.AuthMethod is an interface required by go-git
+//nolint:ireturn // go-git requires returning transport.AuthMethod interface
 func (c *CompositeAuthProvider) Method(remoteURL string) (transport.AuthMethod, error) {
 	if len(c.Providers) == 0 {
 		return nil, fmt.Errorf("no authentication providers configured")

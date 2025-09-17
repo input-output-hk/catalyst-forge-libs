@@ -42,13 +42,13 @@ func TestToBillyFilesystem(t *testing.T) {
 // mockFilesystem is a minimal mock that satisfies fs.Filesystem but is not a billy.FS
 type mockFilesystem struct{}
 
-//nolint:ireturn // returns interface as required by fs.Filesystem interface
+//nolint:ireturn // tests can return interfaces for mocks
 func (m *mockFilesystem) Create(name string) (fs.File, error) { return nil, nil }
 
-//nolint:ireturn // returns interface as required by fs.Filesystem interface
+//nolint:ireturn // tests can return interfaces for mocks
 func (m *mockFilesystem) Open(name string) (fs.File, error) { return nil, nil }
 
-//nolint:ireturn // returns interface as required by fs.Filesystem interface
+//nolint:ireturn // tests can return interfaces for mocks
 func (m *mockFilesystem) OpenFile(name string, flag int, perm os.FileMode) (fs.File, error) {
 	return nil, nil
 }
