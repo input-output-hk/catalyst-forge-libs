@@ -180,47 +180,6 @@ func matchesTagPattern(name, pattern string) bool {
 	return name == pattern
 }
 
-// matchesStarPattern handles * wildcard matching
-func matchesStarPattern(name, pattern string) bool {
-	parts := strings.Split(pattern, "*")
-	remaining := name
-
-	for i, part := range parts {
-		if part == "" {
-			continue // Skip empty parts
-		}
-
-		idx := strings.Index(remaining, part)
-		if idx < 0 {
-			return false // Part not found
-		}
-
-		// First part must be at beginning unless pattern starts with *
-		if i == 0 && pattern[0] != '*' && idx != 0 {
-			return false
-		}
-
-		remaining = remaining[idx+len(part):]
-	}
-
-	// Check if pattern ends with * or remaining is empty
-	return pattern[len(pattern)-1] == '*' || remaining == ""
-}
-
-// matchesQuestionPattern handles ? wildcard matching
-func matchesQuestionPattern(name, pattern string) bool {
-	if len(pattern) != len(name) {
-		return false // Different lengths can't match
-	}
-
-	for i := 0; i < len(pattern); i++ {
-		if pattern[i] != '?' && pattern[i] != name[i] {
-			return false
-		}
-	}
-	return true
-}
-
 // TagPrefixFilter returns a filter that matches tags with the given prefix.
 // For example: "v" matches "v1.0", "v2.0", etc.
 func TagPrefixFilter(prefix string) TagFilter {

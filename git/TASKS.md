@@ -389,7 +389,7 @@ Before marking ANY task complete:
 - All worktree tests continue to pass
 - `golangci-lint` passes
 
-### [ ] 10.5.6 Create history.go
+### [x] 10.5.6 Create history.go
 **Success Criteria:**
 - Extract Log method and CommitIter interface
 - Move all iterator implementations (limitedCommitIter, authorFilteredCommitIter)
@@ -398,7 +398,7 @@ Before marking ANY task complete:
 - All history tests continue to pass
 - `golangci-lint` passes
 
-### [ ] 10.5.7 Create diff.go
+### [x] 10.5.7 Create diff.go
 **Success Criteria:**
 - Extract Diff method
 - Move helper functions (validateDiffInputs, getTreesForDiff, getTreeForRevision)
@@ -407,7 +407,7 @@ Before marking ANY task complete:
 - All diff tests continue to pass
 - `golangci-lint` passes
 
-### [ ] 10.5.8 Create refs.go
+### [x] 10.5.8 Create refs.go
 **Success Criteria:**
 - Extract Refs and Resolve methods
 - Move classifyResolvedRevision helper
@@ -416,7 +416,7 @@ Before marking ANY task complete:
 - All reference tests continue to pass
 - `golangci-lint` passes
 
-### [ ] 10.5.9 Refactor git.go to core types only
+### [x] 10.5.9 Refactor git.go to core types only
 **Success Criteria:**
 - git.go contains only core types and interfaces
 - Options struct, AuthProvider interface, Repo struct definition
