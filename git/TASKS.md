@@ -342,6 +342,124 @@ Before marking ANY task complete:
 
 ---
 
+## Phase 10.5: Code Organization Refactoring
+
+### [ ] 10.5.1 Create lifecycle.go
+**Success Criteria:**
+- Extract Init, Open, Clone functions from git.go
+- Move related helper functions for storage/worktree creation
+- Update imports and ensure no circular dependencies
+- All existing tests pass without modification
+- File size ~400 lines
+- `golangci-lint` passes
+
+### [ ] 10.5.2 Create branch.go
+**Success Criteria:**
+- Extract all branch operations (CurrentBranch, CreateBranch, CheckoutBranch, DeleteBranch, CheckoutRemoteBranch)
+- Move branch-related helper functions
+- Maintain all existing functionality
+- File size ~300 lines
+- All branch tests continue to pass
+- `golangci-lint` passes
+
+### [x] 10.5.3 Create tag.go
+**Success Criteria:**
+- Extract CreateTag, DeleteTag, Tags methods
+- Move all tag filter functions (TagPatternFilter, TagPrefixFilter, TagSuffixFilter, TagExcludeFilter)
+- Move tag-related helper functions (shouldIncludeTag, matchesTagPattern)
+- File size ~300 lines
+- All tag tests continue to pass
+- `golangci-lint` passes
+
+### [x] 10.5.4 Create sync.go
+**Success Criteria:**
+- Extract Fetch, PullFFOnly, FetchAndMerge, Push methods
+- Move MergeStrategy type and String() method
+- Ensure auth provider integration remains intact
+- File size ~250 lines
+- All sync tests continue to pass
+- `golangci-lint` passes
+
+### [x] 10.5.5 Create worktree.go
+**Success Criteria:**
+- Extract Add, Remove, Unstage, Commit methods
+- Move helper functions (expandPathsForUnstage, performUnstageReset, filterStagedPaths)
+- Maintain worktree state management
+- File size ~400 lines
+- All worktree tests continue to pass
+- `golangci-lint` passes
+
+### [ ] 10.5.6 Create history.go
+**Success Criteria:**
+- Extract Log method and CommitIter interface
+- Move all iterator implementations (limitedCommitIter, authorFilteredCommitIter)
+- Move iterator helper methods (Next, ForEach, Close)
+- File size ~300 lines
+- All history tests continue to pass
+- `golangci-lint` passes
+
+### [ ] 10.5.7 Create diff.go
+**Success Criteria:**
+- Extract Diff method
+- Move helper functions (validateDiffInputs, getTreesForDiff, getTreeForRevision)
+- Ensure ChangeFilter integration remains intact
+- File size ~200 lines
+- All diff tests continue to pass
+- `golangci-lint` passes
+
+### [ ] 10.5.8 Create refs.go
+**Success Criteria:**
+- Extract Refs and Resolve methods
+- Move classifyResolvedRevision helper
+- Move RefKind type and String() method if not needed in core
+- File size ~200 lines
+- All reference tests continue to pass
+- `golangci-lint` passes
+
+### [ ] 10.5.9 Refactor git.go to core types only
+**Success Criteria:**
+- git.go contains only core types and interfaces
+- Options struct, AuthProvider interface, Repo struct definition
+- Core types (Signature, CommitOpts, ResolvedRef, etc.)
+- Constants (DefaultStorerCacheSize, DefaultWorkdir, DefaultRemoteName)
+- File size reduced to ~300 lines
+- All tests continue to pass
+- `golangci-lint` passes
+
+### [ ] 10.5.10 Split git_test.go
+**Success Criteria:**
+- Create corresponding test files for each new module
+- lifecycle_test.go for Init/Open/Clone tests
+- branch_test.go for branch operation tests
+- tag_test.go for tag operation tests
+- sync_test.go for fetch/pull/push tests
+- worktree_test.go for staging/commit tests
+- history_test.go for log tests
+- diff_test.go for diff tests
+- refs_test.go for reference tests
+- Each test file < 500 lines
+- All tests continue to pass
+- `golangci-lint` passes
+
+### [ ] 10.5.11 Update documentation
+**Success Criteria:**
+- Update package documentation to describe file organization
+- Add file-level documentation for each new file
+- Document the logical grouping in a package README
+- Ensure godoc generates correctly for all files
+- `golangci-lint` passes
+
+### [ ] 10.5.12 Verify no regression
+**Success Criteria:**
+- Run full test suite with race detection: `go test -v -race ./...`
+- Verify test coverage remains at or above current level (66.4%)
+- Run benchmarks to ensure no performance regression
+- Verify all public APIs remain unchanged
+- No breaking changes for consumers
+- `golangci-lint` passes with zero issues
+
+---
+
 ## Phase 11: Integration Testing
 
 ### [ ] 11.1 Create comprehensive test suite
