@@ -324,21 +324,21 @@ Before marking ANY task complete:
 
 ## Phase 10: Reference Management
 
-### [ ] 10.1 Implement Refs listing
+### [x] 10.1 Implement Refs listing
 **Success Criteria:**
-- Lists refs by RefKind
-- Pattern matching support
-- Proper classification (heads/tags/remotes)
-- Unit tests for all RefKind values
-- `golangci-lint` passes
+- ✓ Lists refs by RefKind
+- ✓ Pattern matching support
+- ✓ Proper classification (heads/tags/remotes)
+- ✓ Unit tests for all RefKind values
+- ✓ `golangci-lint` passes
 
-### [ ] 10.2 Implement Resolve
+### [x] 10.2 Implement Resolve
 **Success Criteria:**
-- Resolves any revision syntax
-- Returns ResolvedRef with Kind and Hash
-- Handles symbolic refs (HEAD, etc.)
-- Unit tests for various revision formats
-- `golangci-lint` passes
+- ✓ Resolves any revision syntax
+- ✓ Returns ResolvedRef with Kind and Hash
+- ✓ Handles symbolic refs (HEAD, etc.)
+- ✓ Unit tests for various revision formats
+- ✓ `golangci-lint` passes
 
 ---
 

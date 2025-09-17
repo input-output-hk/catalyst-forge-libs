@@ -1862,3 +1862,170 @@ func TagExcludeFilter(pattern string) TagFilter {
 		return !includeFilter(name, ref) // Invert the pattern filter
 	}
 }
+
+// Refs returns a list of references that match the specified kind and pattern.
+// The kind parameter filters references by type (branch, remote branch, tag, etc.).
+// The pattern parameter supports glob-style matching with * and ? wildcards.
+// Results are sorted alphabetically.
+//
+// Context timeout/cancellation is honored during the operation.
+func (r *Repo) Refs(ctx context.Context, kind RefKind, pattern string) ([]string, error) {
+	// Get all references from the repository
+	refs, err := r.repo.References()
+	if err != nil {
+		return nil, WrapError(err, "failed to get references")
+	}
+
+	var matchingRefs []string
+
+	// Iterate through all references
+	err = refs.ForEach(func(ref *plumbing.Reference) error {
+		shortName := ref.Name().Short()
+
+		// Classify the reference and check if it matches the requested kind
+		if !matchesRefKind(ref, kind) {
+			return nil
+		}
+
+		// Apply pattern matching if specified
+		if pattern != "" && !matchesRefPattern(shortName, pattern) {
+			return nil
+		}
+
+		// Add the short name to results
+		matchingRefs = append(matchingRefs, shortName)
+		return nil
+	})
+	if err != nil {
+		return nil, WrapError(err, "failed to iterate references")
+	}
+
+	// Sort results alphabetically
+	for i := 0; i < len(matchingRefs)-1; i++ {
+		for j := i + 1; j < len(matchingRefs); j++ {
+			if matchingRefs[i] > matchingRefs[j] {
+				matchingRefs[i], matchingRefs[j] = matchingRefs[j], matchingRefs[i]
+			}
+		}
+	}
+
+	return matchingRefs, nil
+}
+
+// matchesRefKind checks if a reference matches the specified RefKind
+func matchesRefKind(ref *plumbing.Reference, kind RefKind) bool {
+	switch kind {
+	case RefBranch:
+		return ref.Name().IsBranch()
+	case RefRemoteBranch:
+		return ref.Name().IsRemote() && strings.Contains(ref.Name().String(), "/")
+	case RefTag:
+		return ref.Name().IsTag()
+	case RefRemote:
+		return ref.Name().IsRemote()
+	case RefCommit:
+		// RefCommit is for commit hashes, not symbolic references
+		// This would require checking if the reference points to a commit
+		// For now, we'll treat this as "other" since commit hashes aren't typically stored as refs
+		return false
+	case RefOther:
+		return !ref.Name().IsBranch() && !ref.Name().IsTag() && !ref.Name().IsRemote()
+	default:
+		return false
+	}
+}
+
+// matchesRefPattern checks if a reference name matches the given pattern
+func matchesRefPattern(name, pattern string) bool {
+	if pattern == "" {
+		return true // Empty pattern matches all
+	}
+
+	// Handle * wildcard
+	if strings.Contains(pattern, "*") {
+		return matchesStarPattern(name, pattern)
+	}
+
+	// Handle ? wildcard
+	if strings.Contains(pattern, "?") {
+		return matchesQuestionPattern(name, pattern)
+	}
+
+	// Exact match for patterns without wildcards
+	return name == pattern
+}
+
+// Resolve resolves a revision specification to a ResolvedRef containing the kind and hash.
+// The revision can be any valid git revision syntax (commit hash, branch name, tag, HEAD, etc.).
+// Returns a ResolvedRef with the reference kind, resolved hash, and canonical name.
+//
+// Context timeout/cancellation is honored during the operation.
+func (r *Repo) Resolve(ctx context.Context, rev string) (*ResolvedRef, error) {
+	if rev == "" {
+		return nil, WrapError(ErrInvalidRef, "revision cannot be empty")
+	}
+
+	// Resolve the revision to a hash
+	hash, err := r.repo.ResolveRevision(plumbing.Revision(rev))
+	if err != nil {
+		return nil, WrapError(ErrResolveFailed, "failed to resolve revision")
+	}
+
+	// Determine the reference kind and canonical name
+	kind, canonicalName := r.classifyResolvedRevision(rev, hash)
+
+	return &ResolvedRef{
+		Kind:          kind,
+		Hash:          hash.String(),
+		CanonicalName: canonicalName,
+	}, nil
+}
+
+// classifyResolvedRevision determines the RefKind and canonical name for a resolved revision
+func (r *Repo) classifyResolvedRevision(rev string, hash *plumbing.Hash) (RefKind, string) {
+	// Check if it's a full or short commit hash
+	if plumbing.IsHash(rev) || len(rev) >= 4 && plumbing.IsHash(rev) {
+		return RefCommit, hash.String()
+	}
+
+	// Check if it's HEAD
+	if rev == "HEAD" {
+		return RefOther, "HEAD"
+	}
+
+	// Try to find a reference with this name
+	refs, err := r.repo.References()
+	if err != nil {
+		// If we can't get references, assume it's a commit
+		return RefCommit, hash.String()
+	}
+
+	var foundRef *plumbing.Reference
+	_ = refs.ForEach(func(ref *plumbing.Reference) error {
+		if ref.Name().Short() == rev || ref.Name().String() == rev {
+			foundRef = ref
+			return nil // Stop iteration
+		}
+		return nil
+	})
+
+	if foundRef != nil {
+		// Classify the found reference
+		switch {
+		case foundRef.Name().IsBranch():
+			return RefBranch, foundRef.Name().String()
+		case foundRef.Name().IsTag():
+			return RefTag, foundRef.Name().String()
+		case foundRef.Name().IsRemote():
+			if strings.Contains(foundRef.Name().String(), "/") {
+				return RefRemoteBranch, foundRef.Name().String()
+			}
+			return RefRemote, foundRef.Name().String()
+		default:
+			return RefOther, foundRef.Name().String()
+		}
+	}
+
+	// If no reference found, it might be a partial hash or other revision syntax
+	return RefCommit, hash.String()
+}
