@@ -1759,3 +1759,147 @@ func TestAdd(t *testing.T) {
 		})
 	}
 }
+
+// TestLog tests the Log operation with various filters
+func TestLog(t *testing.T) {
+	tests := []struct {
+		name        string
+		setup       func(t *testing.T) *testRepo
+		filter      LogFilter
+		expectError bool
+		validate    func(t *testing.T, iter *CommitIter, err error)
+	}{
+		{
+			name:        "basic log without filters",
+			setup:       setupTestRepoWithCommit,
+			filter:      LogFilter{},
+			expectError: false,
+			validate: func(t *testing.T, iter *CommitIter, err error) {
+				require.NoError(t, err)
+				require.NotNil(t, iter)
+
+				// Should have at least one commit
+				commit, err := iter.Next()
+				require.NoError(t, err)
+				require.NotNil(t, commit)
+				assert.Equal(t, "Initial commit", commit.Message)
+
+				// Should be end of iteration
+				nextCommit, err := iter.Next()
+				require.NoError(t, err)
+				assert.Nil(t, nextCommit)
+
+				iter.Close()
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tr := tt.setup(t)
+
+			ctx := context.Background()
+			iter, err := tr.repo.Log(ctx, tt.filter)
+
+			if tt.expectError {
+				require.Error(t, err)
+				return
+			}
+
+			tt.validate(t, iter, err)
+		})
+	}
+}
+
+// TestDiff tests the Diff operation between revisions
+func TestDiff(t *testing.T) {
+	tests := []struct {
+		name        string
+		setup       func(t *testing.T) *testRepo
+		revA        string
+		revB        string
+		filters     []ChangeFilter
+		expectError bool
+		validate    func(t *testing.T, patch *PatchText, err error)
+	}{
+		{
+			name: "diff between commits",
+			setup: func(t *testing.T) *testRepo {
+				tr := setupTestRepoWithCommit(t)
+
+				// Create second commit with changes
+				tr.modifyTestFile(t, "modified content")
+				_, err := tr.repo.worktree.Add("test.txt")
+				require.NoError(t, err)
+				_, err = tr.repo.worktree.Commit("Second commit", &git.CommitOptions{})
+				require.NoError(t, err)
+
+				return tr
+			},
+			revA:        "HEAD~1",
+			revB:        "HEAD",
+			filters:     nil,
+			expectError: false,
+			validate: func(t *testing.T, patch *PatchText, err error) {
+				require.NoError(t, err)
+				require.NotNil(t, patch)
+				assert.Contains(t, patch.Text, "diff --git")
+				assert.Contains(t, patch.Text, "test.txt")
+				assert.False(t, patch.IsBinary)
+				assert.Greater(t, patch.FileCount, 0)
+			},
+		},
+		{
+			name: "diff with path filter",
+			setup: func(t *testing.T) *testRepo {
+				tr := setupTestRepoWithCommit(t)
+
+				// Create multiple files in second commit
+				err := tr.fs.WriteFile("file1.go", []byte("go content"), 0o644)
+				require.NoError(t, err)
+				err = tr.fs.WriteFile("file2.md", []byte("markdown content"), 0o644)
+				require.NoError(t, err)
+
+				_, err = tr.repo.worktree.Add("file1.go")
+				require.NoError(t, err)
+				_, err = tr.repo.worktree.Add("file2.md")
+				require.NoError(t, err)
+
+				_, err = tr.repo.worktree.Commit("Add multiple files", &git.CommitOptions{})
+				require.NoError(t, err)
+
+				return tr
+			},
+			revA: "HEAD~1",
+			revB: "HEAD",
+			filters: []ChangeFilter{
+				ExtensionFilter(".go"), // Only include .go files
+			},
+			expectError: false,
+			validate: func(t *testing.T, patch *PatchText, err error) {
+				require.NoError(t, err)
+				require.NotNil(t, patch)
+				assert.Contains(t, patch.Text, "file1.go")
+				assert.NotContains(t, patch.Text, "file2.md")
+				assert.Equal(t, 1, patch.FileCount)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tr := tt.setup(t)
+			ctx := context.Background()
+
+			patch, err := tr.repo.Diff(ctx, tt.revA, tt.revB, tt.filters...)
+
+			if tt.expectError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+
+			tt.validate(t, patch, err)
+		})
+	}
+}

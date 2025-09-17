@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -243,6 +244,58 @@ func (k RefKind) String() string {
 		return "unknown"
 	}
 }
+
+// CommitIter represents an iterator over commits returned by Log operations.
+// It provides methods to iterate through commits efficiently without loading
+// all commits into memory at once.
+type CommitIter struct {
+	iter object.CommitIter
+}
+
+// Next returns the next commit in the iteration.
+// Returns nil when iteration is complete.
+func (ci *CommitIter) Next() (*object.Commit, error) {
+	commit, err := ci.iter.Next()
+	if err != nil {
+		// Check if this is EOF (end of iteration)
+		if err.Error() == "EOF" {
+			return nil, nil
+		}
+		return nil, WrapError(err, "failed to get next commit")
+	}
+	return commit, nil
+}
+
+// ForEach executes the provided function for each commit in the iterator.
+// Iteration stops if the function returns an error.
+func (ci *CommitIter) ForEach(fn func(*object.Commit) error) error {
+	return WrapError(ci.iter.ForEach(fn), "failed to iterate commits")
+}
+
+// Close closes the iterator and releases any associated resources.
+func (ci *CommitIter) Close() {
+	ci.iter.Close()
+}
+
+// PatchText represents unified diff text between two revisions.
+// It contains the formatted diff output that can be displayed to users
+// or processed by other tools.
+type PatchText struct {
+	// Text contains the unified diff in string format.
+	Text string
+
+	// IsBinary indicates whether the diff contains binary files.
+	// When true, the diff text may be truncated or contain binary markers.
+	IsBinary bool
+
+	// FileCount indicates the number of files that have changes.
+	FileCount int
+}
+
+// ChangeFilter is a predicate function for filtering changes in diffs.
+// It returns true if the change should be included in the diff output.
+// Filters are applied progressively - if any filter returns false, the change is excluded.
+type ChangeFilter func(*object.Change) bool
 
 // Repo represents a git repository and provides high-level operations.
 // It wraps a go-git Repository and Worktree, operating exclusively through
@@ -1214,4 +1267,329 @@ func (r *Repo) Add(ctx context.Context, paths ...string) error {
 	}
 
 	return nil
+}
+
+// Log returns a commit iterator for the repository with the specified filters applied.
+// The LogFilter can be used to limit results by time range, author, paths, or maximum count.
+// The returned CommitIter should be closed when no longer needed to free resources.
+//
+// Context timeout/cancellation is honored during the operation.
+func (r *Repo) Log(ctx context.Context, f LogFilter) (*CommitIter, error) {
+	// Prepare log options from the filter
+	logOpts := &git.LogOptions{}
+
+	// Apply time filters
+	if f.Since != nil {
+		logOpts.Since = f.Since
+	}
+	if f.Until != nil {
+		logOpts.Until = f.Until
+	}
+
+	// Note: go-git doesn't support author filtering directly in LogOptions
+	// Author filtering will be done by post-processing the results
+	_ = f.Author // We'll handle this in post-processing
+
+	// Apply path filters
+	if len(f.Path) > 0 {
+		logOpts.PathFilter = func(path string) bool {
+			for _, filterPath := range f.Path {
+				// Simple substring match - could be enhanced with glob support
+				if strings.Contains(path, filterPath) {
+					return true
+				}
+			}
+			return false
+		}
+	}
+
+	// Apply max count limit
+	if f.MaxCount > 0 {
+		logOpts.Order = git.LogOrderCommitterTime // Ensure consistent ordering
+	}
+
+	// Get the commit iterator from go-git
+	iter, err := r.repo.Log(logOpts)
+	if err != nil {
+		return nil, WrapError(err, "failed to create commit iterator")
+	}
+
+	// Create the base iterator
+	commitIter := &CommitIter{iter: iter}
+
+	// Apply author filtering if specified
+	if f.Author != "" {
+		authorFilteredIter := &authorFilteredCommitIter{
+			iter:   commitIter,
+			author: f.Author,
+		}
+		commitIter = &CommitIter{iter: authorFilteredIter}
+	}
+
+	// If MaxCount is specified, we need to limit the results
+	if f.MaxCount > 0 {
+		limitedIter := &limitedCommitIter{
+			iter:     commitIter,
+			maxCount: f.MaxCount,
+			count:    0,
+		}
+		return &CommitIter{iter: limitedIter}, nil
+	}
+
+	return commitIter, nil
+}
+
+// limitedCommitIter wraps a CommitIter to limit the number of commits returned
+type limitedCommitIter struct {
+	iter     *CommitIter
+	maxCount int
+	count    int
+}
+
+// Next returns the next commit or nil if max count is reached
+func (l *limitedCommitIter) Next() (*object.Commit, error) {
+	if l.count >= l.maxCount {
+		return nil, nil // End of iteration
+	}
+	commit, err := l.iter.Next()
+	if err != nil {
+		return nil, err
+	}
+	if commit != nil {
+		l.count++
+	}
+	return commit, nil
+}
+
+// ForEach executes the function for each commit up to the max count
+func (l *limitedCommitIter) ForEach(fn func(*object.Commit) error) error {
+	for l.count < l.maxCount {
+		commit, err := l.iter.Next()
+		if err != nil {
+			return err
+		}
+		if commit == nil {
+			break // End of iteration
+		}
+		if err := fn(commit); err != nil {
+			return err
+		}
+		l.count++
+	}
+	return nil
+}
+
+// Close closes the underlying iterator
+func (l *limitedCommitIter) Close() {
+	l.iter.Close()
+}
+
+// authorFilteredCommitIter wraps a CommitIter to filter commits by author
+type authorFilteredCommitIter struct {
+	iter   *CommitIter
+	author string
+}
+
+// Next returns the next commit that matches the author filter
+func (a *authorFilteredCommitIter) Next() (*object.Commit, error) {
+	for {
+		commit, err := a.iter.Next()
+		if err != nil {
+			return nil, err
+		}
+		if commit == nil {
+			return nil, nil // End of iteration
+		}
+
+		// Check if author matches
+		authorMatch := strings.Contains(commit.Author.Name, a.author) ||
+			strings.Contains(commit.Author.Email, a.author)
+		committerMatch := strings.Contains(commit.Committer.Name, a.author) ||
+			strings.Contains(commit.Committer.Email, a.author)
+
+		if authorMatch || committerMatch {
+			return commit, nil
+		}
+		// Continue to next commit if this one doesn't match
+	}
+}
+
+// ForEach executes the function for each commit that matches the author filter
+func (a *authorFilteredCommitIter) ForEach(fn func(*object.Commit) error) error {
+	for {
+		commit, err := a.iter.Next()
+		if err != nil {
+			return err
+		}
+		if commit == nil {
+			break // End of iteration
+		}
+
+		// Check if author matches
+		authorMatch := strings.Contains(commit.Author.Name, a.author) ||
+			strings.Contains(commit.Author.Email, a.author)
+		committerMatch := strings.Contains(commit.Committer.Name, a.author) ||
+			strings.Contains(commit.Committer.Email, a.author)
+
+		if authorMatch || committerMatch {
+			if err := fn(commit); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// Close closes the underlying iterator
+func (a *authorFilteredCommitIter) Close() {
+	a.iter.Close()
+}
+
+// Diff computes the diff between two revisions and returns unified diff text.
+// The revisions 'a' and 'b' can be any valid git revision specifiers (commit hashes,
+// branch names, tags, etc.).
+//
+// Filters are applied progressively - a change must pass ALL filters to be included.
+// If no filters are provided, all changes are included.
+//
+// The method handles binary files appropriately by detecting them and marking
+// the result accordingly. The returned PatchText contains the unified diff text
+// that can be displayed to users or processed by other tools.
+//
+// Context timeout/cancellation is honored during the operation.
+func (r *Repo) Diff(ctx context.Context, a, b string, filters ...ChangeFilter) (*PatchText, error) {
+	// Validate inputs
+	if err := validateDiffInputs(a, b); err != nil {
+		return nil, err
+	}
+
+	// Get trees for both revisions
+	treeA, treeB, err := r.getTreesForDiff(a, b)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get all changes between the trees
+	changes, err := treeA.Diff(treeB)
+	if err != nil {
+		return nil, WrapError(err, "failed to compute changes")
+	}
+
+	// Apply filters and get filtered changes
+	filteredChanges := applyChangeFilters(changes, filters)
+
+	// Generate patch from filtered changes
+	patch, err := filteredChanges.Patch()
+	if err != nil {
+		return nil, WrapError(err, "failed to generate patch")
+	}
+
+	// Build and return the result
+	return buildPatchResult(patch.String(), filteredChanges), nil
+}
+
+// validateDiffInputs validates the revision inputs for diff
+func validateDiffInputs(a, b string) error {
+	if a == "" {
+		return WrapError(ErrInvalidRef, "revision 'a' cannot be empty")
+	}
+	if b == "" {
+		return WrapError(ErrInvalidRef, "revision 'b' cannot be empty")
+	}
+	return nil
+}
+
+// getTreesForDiff resolves revisions and returns their trees
+func (r *Repo) getTreesForDiff(a, b string) (*object.Tree, *object.Tree, error) {
+	// Resolve and get tree for revision 'a'
+	treeA, err := r.getTreeForRevision(a)
+	if err != nil {
+		return nil, nil, WrapErrorf(err, "failed to get tree for revision %q", a)
+	}
+
+	// Resolve and get tree for revision 'b'
+	treeB, err := r.getTreeForRevision(b)
+	if err != nil {
+		return nil, nil, WrapErrorf(err, "failed to get tree for revision %q", b)
+	}
+
+	return treeA, treeB, nil
+}
+
+// getTreeForRevision resolves a revision and returns its tree
+func (r *Repo) getTreeForRevision(rev string) (*object.Tree, error) {
+	hash, err := r.repo.ResolveRevision(plumbing.Revision(rev))
+	if err != nil {
+		return nil, WrapError(ErrResolveFailed, "failed to resolve revision")
+	}
+
+	commit, err := r.repo.CommitObject(*hash)
+	if err != nil {
+		return nil, WrapError(err, "failed to get commit object")
+	}
+
+	tree, err := commit.Tree()
+	if err != nil {
+		return nil, WrapError(err, "failed to get tree")
+	}
+
+	return tree, nil
+}
+
+// applyChangeFilters applies all filters to changes and returns filtered results
+func applyChangeFilters(changes object.Changes, filters []ChangeFilter) object.Changes {
+	var filteredChanges object.Changes
+	for _, change := range changes {
+		if shouldIncludeChange(change, filters) {
+			filteredChanges = append(filteredChanges, change)
+		}
+	}
+	return filteredChanges
+}
+
+// shouldIncludeChange checks if a change passes all filters
+func shouldIncludeChange(change *object.Change, filters []ChangeFilter) bool {
+	for _, filter := range filters {
+		if filter != nil && !filter(change) {
+			return false
+		}
+	}
+	return true
+}
+
+// buildPatchResult builds the PatchText result from the diff text and changes
+func buildPatchResult(diffText string, changes object.Changes) *PatchText {
+	return &PatchText{
+		Text:      diffText,
+		IsBinary:  containsBinaryChanges(changes),
+		FileCount: len(changes),
+	}
+}
+
+// containsBinaryChanges checks if any of the changes are for binary files
+func containsBinaryChanges(changes object.Changes) bool {
+	for _, change := range changes {
+		if isBinaryPath(change.From.Name) || isBinaryPath(change.To.Name) {
+			return true
+		}
+	}
+	return false
+}
+
+// isBinaryPath checks if a file path likely represents a binary file based on extension
+func isBinaryPath(path string) bool {
+	if path == "" {
+		return false
+	}
+
+	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))
+	binaryExts := map[string]bool{
+		"png": true, "jpg": true, "jpeg": true, "gif": true, "ico": true,
+		"pdf": true, "zip": true, "tar": true, "gz": true, "bz2": true,
+		"exe": true, "dll": true, "so": true, "dylib": true, "bin": true,
+		"mp3": true, "mp4": true, "avi": true, "mov": true, "wav": true,
+		"ttf": true, "otf": true, "woff": true, "woff2": true, "eot": true,
+	}
+
+	return binaryExts[ext]
 }

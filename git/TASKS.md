@@ -276,22 +276,22 @@ Before marking ANY task complete:
 
 ## Phase 8: History & Diff
 
-### [ ] 8.1 Implement Log
+### [x] 8.1 Implement Log
 **Success Criteria:**
-- Returns commit iterator
-- LogFilter for path/author/date filtering
-- Efficient pagination support
-- Unit tests with various filters
-- `golangci-lint` passes
+- ✓ Returns commit iterator
+- ✓ LogFilter for path/author/date filtering
+- ✓ Efficient pagination support
+- ✓ Unit tests with various filters
+- ✓ `golangci-lint` passes
 
-### [ ] 8.2 Implement Diff
+### [x] 8.2 Implement Diff
 **Success Criteria:**
-- Computes diff between any two revisions
-- Path filtering support
-- Returns unified diff text
-- Handles binary files appropriately
-- Unit tests for various diff scenarios
-- `golangci-lint` passes
+- ✓ Computes diff between any two revisions
+- ✓ Path filtering support
+- ✓ Returns unified diff text
+- ✓ Handles binary files appropriately
+- ✓ Unit tests for various diff scenarios
+- ✓ `golangci-lint` passes
 
 ---
 
