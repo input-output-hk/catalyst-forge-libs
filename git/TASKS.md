@@ -297,28 +297,28 @@ Before marking ANY task complete:
 
 ## Phase 9: Tags
 
-### [ ] 9.1 Implement CreateTag
+### [x] 9.1 Implement CreateTag
 **Success Criteria:**
-- Creates lightweight or annotated tags
-- Annotated when message provided
-- Target resolution from any revision
-- Unit tests for both tag types
-- `golangci-lint` passes
+- ✓ Creates lightweight or annotated tags
+- ✓ Annotated when message provided
+- ✓ Target resolution from any revision
+- ✓ Unit tests for both tag types
+- ✓ `golangci-lint` passes
 
-### [ ] 9.2 Implement DeleteTag
+### [x] 9.2 Implement DeleteTag
 **Success Criteria:**
-- Deletes local tag
-- Returns `ErrTagMissing` for non-existent
-- Unit tests including error cases
-- `golangci-lint` passes
+- ✓ Deletes local tag
+- ✓ Returns `ErrTagMissing` for non-existent
+- ✓ Unit tests including error cases
+- ✓ `golangci-lint` passes
 
-### [ ] 9.3 Implement Tags listing
+### [x] 9.3 Implement Tags listing
 **Success Criteria:**
-- Lists tags matching pattern
-- Supports wildcards
-- Sorted output
-- Unit tests with various patterns
-- `golangci-lint` passes
+- ✓ Lists tags matching pattern
+- ✓ Supports wildcards
+- ✓ Sorted output
+- ✓ Unit tests with various patterns
+- ✓ `golangci-lint` passes
 
 ---
 
