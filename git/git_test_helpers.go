@@ -6,14 +6,15 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-	billyfs "github.com/input-output-hk/catalyst-forge-libs/fs/billy"
+	"github.com/input-output-hk/catalyst-forge-libs/fs"
+	fsb "github.com/input-output-hk/catalyst-forge-libs/fs/billy"
 	"github.com/stretchr/testify/require"
 )
 
 // testRepo is a helper struct that contains a test repository and its filesystem
 type testRepo struct {
 	repo *Repo
-	fs   *billyfs.FS
+	fs   fs.Filesystem
 	ctx  context.Context
 }
 
@@ -22,7 +23,7 @@ func setupTestRepo(t *testing.T, bare bool) *testRepo {
 	t.Helper()
 
 	ctx := context.Background()
-	memFS := billyfs.NewInMemoryFS()
+	memFS := fsb.NewInMemoryFS()
 
 	opts := Options{
 		FS:      memFS,

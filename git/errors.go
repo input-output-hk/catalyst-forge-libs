@@ -52,6 +52,10 @@ var ErrInvalidRef = errors.New("invalid reference")
 // to a valid commit hash (e.g., branch/tag doesn't exist, invalid SHA).
 var ErrResolveFailed = errors.New("cannot resolve revision")
 
+// ErrEmptyCommit is returned when attempting to create a commit with no changes
+// and AllowEmpty is false.
+var ErrEmptyCommit = errors.New("cannot create empty commit")
+
 // WrapError wraps an error with additional context while preserving
 // the ability to check against sentinel errors using errors.Is().
 func WrapError(err error, msg string) error {

@@ -240,37 +240,37 @@ Before marking ANY task complete:
 
 ## Phase 7: Working Tree Operations
 
-### [ ] 7.1 Implement Add (stage files)
+### [x] 7.1 Implement Add (stage files)
 **Success Criteria:**
-- Stages specified paths
-- Supports glob patterns
-- Handles missing files appropriately
-- Unit tests for various path patterns
-- `golangci-lint` passes
+- Stages specified paths ✓
+- Supports glob patterns ✓
+- Handles missing files appropriately ✓
+- Unit tests for various path patterns ✓
+- `golangci-lint` passes ✓
 
-### [ ] 7.2 Implement Remove
+### [x] 7.2 Implement Remove
 **Success Criteria:**
-- Removes files from index and worktree
-- Handles already-deleted files
-- Unit tests for edge cases
-- `golangci-lint` passes
+- Removes files from index and worktree ✓
+- Handles already-deleted files ✓
+- Unit tests for edge cases ✓
+- `golangci-lint` passes ✓
 
-### [ ] 7.3 Implement Unstage
+### [x] 7.3 Implement Unstage
 **Success Criteria:**
-- Unstages without modifying worktree
-- Uses Reset (mixed) or ResetSparsely
-- Handles partially staged files
-- Unit tests for various states
-- `golangci-lint` passes
+- Unstages without modifying worktree ✓
+- Uses Reset (mixed) or ResetSparsely ✓
+- Handles partially staged files ✓
+- Unit tests for various states ✓
+- `golangci-lint` passes ✓
 
-### [ ] 7.4 Implement Commit
+### [x] 7.4 Implement Commit
 **Success Criteria:**
-- Creates commit with message and signature
-- Returns commit SHA
-- CommitOpts for additional options
-- Empty commit handling
-- Unit tests including empty tree
-- `golangci-lint` passes
+- Creates commit with message and signature ✓
+- Returns commit SHA ✓
+- CommitOpts for additional options ✓
+- Empty commit handling ✓
+- Unit tests including empty tree ✓
+- `golangci-lint` passes ✓
 
 ---
 
