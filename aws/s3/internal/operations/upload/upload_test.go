@@ -1,0 +1,433 @@
+// Package upload provides unit tests for S3 upload operations.
+package upload
+
+import (
+	"context"
+	"errors"
+	"io"
+	"os"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	awstypes "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/input-output-hk/catalyst-forge-libs/aws/s3/internal/testutil"
+	"github.com/input-output-hk/catalyst-forge-libs/aws/s3/s3types"
+)
+
+func TestUploader_Upload_Simple(t *testing.T) {
+	tests := []struct {
+		name        string
+		content     string
+		bucket      string
+		key         string
+		config      *s3types.UploadConfig
+		mockFunc    func(*testutil.MockS3Client)
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:    "successful small upload",
+			content: "Hello, World!",
+			bucket:  "test-bucket",
+			key:     "test-key",
+			config: &s3types.UploadConfig{
+				ContentType: "text/plain",
+			},
+			mockFunc: func(m *testutil.MockS3Client) {
+				m.PutObjectFunc = func(ctx context.Context, input *s3.PutObjectInput, opts ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
+					// Verify input
+					assert.Equal(t, "test-bucket", aws.ToString(input.Bucket))
+					assert.Equal(t, "test-key", aws.ToString(input.Key))
+					assert.Equal(t, "text/plain", aws.ToString(input.ContentType))
+
+					// Read the body to ensure it's correct
+					body, err := io.ReadAll(input.Body)
+					require.NoError(t, err)
+					assert.Equal(t, "Hello, World!", string(body))
+
+					return &s3.PutObjectOutput{
+						ETag: aws.String("test-etag"),
+					}, nil
+				}
+			},
+			wantErr: false,
+		},
+		{
+			name:    "upload with metadata",
+			content: "test content",
+			bucket:  "test-bucket",
+			key:     "test-key",
+			config: &s3types.UploadConfig{
+				ContentType: "text/plain",
+				Metadata: map[string]string{
+					"author":  "test",
+					"version": "1.0",
+				},
+			},
+			mockFunc: func(m *testutil.MockS3Client) {
+				m.PutObjectFunc = func(ctx context.Context, input *s3.PutObjectInput, opts ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
+					assert.Equal(t, "test", input.Metadata["author"])
+					assert.Equal(t, "1.0", input.Metadata["version"])
+					return &s3.PutObjectOutput{
+						ETag: aws.String("test-etag"),
+					}, nil
+				}
+			},
+			wantErr: false,
+		},
+		{
+			name:    "upload with SSE-S3",
+			content: "encrypted content",
+			bucket:  "test-bucket",
+			key:     "test-key",
+			config: &s3types.UploadConfig{
+				ContentType: "text/plain",
+				SSE: &s3types.SSEConfig{
+					Type: "AES256", // Use string literal for now
+				},
+			},
+			mockFunc: func(m *testutil.MockS3Client) {
+				m.PutObjectFunc = func(ctx context.Context, input *s3.PutObjectInput, opts ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
+					assert.Equal(t, awstypes.ServerSideEncryptionAes256, input.ServerSideEncryption)
+					return &s3.PutObjectOutput{
+						ETag: aws.String("test-etag"),
+					}, nil
+				}
+			},
+			wantErr: false,
+		},
+		{
+			name:    "upload failure",
+			content: "test content",
+			bucket:  "test-bucket",
+			key:     "test-key",
+			config:  &s3types.UploadConfig{},
+			mockFunc: func(m *testutil.MockS3Client) {
+				m.PutObjectFunc = func(ctx context.Context, input *s3.PutObjectInput, opts ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
+					return nil, errors.New("upload failed")
+				}
+			},
+			wantErr:     true,
+			errContains: "upload failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient := &testutil.MockS3Client{}
+			if tt.mockFunc != nil {
+				tt.mockFunc(mockClient)
+			}
+
+			// Create uploader with mock client
+			uploader := New(mockClient)
+
+			ctx := context.Background()
+			startTime := time.Now()
+
+			// Test the Upload method
+			result, err := uploader.Upload(ctx, tt.bucket, tt.key, strings.NewReader(tt.content), tt.config, startTime)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, result)
+				assert.Equal(t, tt.key, result.Key)
+				assert.Equal(t, int64(len(tt.content)), result.Size)
+			}
+		})
+	}
+}
+
+func TestUploader_Upload_Multipart(t *testing.T) {
+	// Create large content (>100MB threshold)
+	largeContent := strings.Repeat("A", 100*1024*1024+1)
+
+	tests := []struct {
+		name        string
+		content     string
+		bucket      string
+		key         string
+		config      *s3types.UploadConfig
+		mockFunc    func(*testutil.MockS3Client)
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:    "successful multipart upload",
+			content: largeContent,
+			bucket:  "test-bucket",
+			key:     "large-file",
+			config: &s3types.UploadConfig{
+				ContentType: "application/octet-stream",
+				PartSize:    5 * 1024 * 1024, // 5MB parts
+			},
+			mockFunc: func(m *testutil.MockS3Client) {
+				m.CreateMultipartUploadFunc = func(ctx context.Context, input *s3.CreateMultipartUploadInput, opts ...func(*s3.Options)) (*s3.CreateMultipartUploadOutput, error) {
+					return &s3.CreateMultipartUploadOutput{
+						UploadId: aws.String("test-upload-id"),
+					}, nil
+				}
+				m.UploadPartFunc = func(ctx context.Context, input *s3.UploadPartInput, opts ...func(*s3.Options)) (*s3.UploadPartOutput, error) {
+					return &s3.UploadPartOutput{
+						ETag: aws.String("part-etag"),
+					}, nil
+				}
+				m.CompleteMultipartUploadFunc = func(ctx context.Context, input *s3.CompleteMultipartUploadInput, opts ...func(*s3.Options)) (*s3.CompleteMultipartUploadOutput, error) {
+					return &s3.CompleteMultipartUploadOutput{
+						ETag: aws.String("complete-etag"),
+					}, nil
+				}
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient := &testutil.MockS3Client{}
+			if tt.mockFunc != nil {
+				tt.mockFunc(mockClient)
+			}
+
+			// Create uploader with mock client
+			uploader := New(mockClient)
+
+			ctx := context.Background()
+			startTime := time.Now()
+
+			// Test the Upload method with large content
+			result, err := uploader.Upload(ctx, tt.bucket, tt.key, strings.NewReader(tt.content), tt.config, startTime)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, result)
+				assert.Equal(t, tt.key, result.Key)
+				assert.Equal(t, int64(len(tt.content)), result.Size)
+				assert.NotEmpty(t, result.ETag)
+			}
+		})
+	}
+}
+
+func TestUploader_UploadFile(t *testing.T) {
+	// Create a temporary test file
+	tmpFile := createTempFile(t, "test content")
+	defer os.Remove(tmpFile)
+
+	tests := []struct {
+		name     string
+		bucket   string
+		key      string
+		filepath string
+		config   *s3types.UploadConfig
+		mockFunc func(*testutil.MockS3Client)
+		wantErr  bool
+	}{
+		{
+			name:     "successful file upload",
+			bucket:   "test-bucket",
+			key:      "test-file",
+			filepath: tmpFile,
+			config: &s3types.UploadConfig{
+				ContentType: "text/plain",
+			},
+			mockFunc: func(m *testutil.MockS3Client) {
+				m.PutObjectFunc = func(ctx context.Context, input *s3.PutObjectInput, opts ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
+					// Verify bucket and key
+					assert.Equal(t, "test-bucket", aws.ToString(input.Bucket))
+					assert.Equal(t, "test-file", aws.ToString(input.Key))
+					assert.Equal(t, "text/plain", aws.ToString(input.ContentType))
+
+					// Read and verify content
+					body, err := io.ReadAll(input.Body)
+					require.NoError(t, err)
+					assert.Equal(t, "test content", string(body))
+
+					return &s3.PutObjectOutput{
+						ETag: aws.String("file-etag"),
+					}, nil
+				}
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient := &testutil.MockS3Client{}
+			if tt.mockFunc != nil {
+				tt.mockFunc(mockClient)
+			}
+
+			// Create uploader with mock client
+			uploader := New(mockClient)
+
+			// Open the file for reading
+			file, err := os.Open(tt.filepath)
+			require.NoError(t, err)
+			defer file.Close()
+
+			// Get file info for size
+			info, err := file.Stat()
+			require.NoError(t, err)
+
+			ctx := context.Background()
+			startTime := time.Now()
+
+			// Test the UploadFile method
+			result, err := uploader.UploadFile(ctx, tt.bucket, tt.key, file, info.Size(), tt.config, startTime)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, result)
+				assert.Equal(t, tt.key, result.Key)
+				assert.Equal(t, info.Size(), result.Size)
+				assert.NotEmpty(t, result.ETag)
+			}
+		})
+	}
+}
+
+func TestUploader_UploadSimple(t *testing.T) {
+	tests := []struct {
+		name        string
+		bucket      string
+		key         string
+		data        []byte
+		config      *s3types.UploadConfig
+		mockFunc    func(*testutil.MockS3Client)
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:   "successful simple upload",
+			bucket: "test-bucket",
+			key:    "test-key",
+			data:   []byte("simple upload test"),
+			config: &s3types.UploadConfig{
+				ContentType: "text/plain",
+				Metadata: map[string]string{
+					"test": "metadata",
+				},
+			},
+			mockFunc: func(m *testutil.MockS3Client) {
+				m.PutObjectFunc = func(ctx context.Context, input *s3.PutObjectInput, opts ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
+					// Verify all parameters
+					assert.Equal(t, "test-bucket", aws.ToString(input.Bucket))
+					assert.Equal(t, "test-key", aws.ToString(input.Key))
+					assert.Equal(t, "text/plain", aws.ToString(input.ContentType))
+					assert.Equal(t, int64(18), aws.ToInt64(input.ContentLength))
+					assert.Equal(t, "metadata", input.Metadata["test"])
+
+					return &s3.PutObjectOutput{
+						ETag: aws.String("simple-etag"),
+					}, nil
+				}
+			},
+			wantErr: false,
+		},
+		{
+			name:   "upload with SSE-KMS",
+			bucket: "test-bucket",
+			key:    "encrypted-key",
+			data:   []byte("encrypted data"),
+			config: &s3types.UploadConfig{
+				ContentType: "text/plain",
+				SSE: &s3types.SSEConfig{
+					Type:     "aws:kms",
+					KMSKeyID: "my-kms-key",
+				},
+			},
+			mockFunc: func(m *testutil.MockS3Client) {
+				m.PutObjectFunc = func(ctx context.Context, input *s3.PutObjectInput, opts ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
+					// Verify encryption settings
+					assert.Equal(t, awstypes.ServerSideEncryptionAwsKms, input.ServerSideEncryption)
+					assert.Equal(t, "my-kms-key", aws.ToString(input.SSEKMSKeyId))
+
+					return &s3.PutObjectOutput{
+						ETag: aws.String("encrypted-etag"),
+					}, nil
+				}
+			},
+			wantErr: false,
+		},
+		{
+			name:   "simple upload failure",
+			bucket: "test-bucket",
+			key:    "test-key",
+			data:   []byte("test data"),
+			config: &s3types.UploadConfig{},
+			mockFunc: func(m *testutil.MockS3Client) {
+				m.PutObjectFunc = func(ctx context.Context, input *s3.PutObjectInput, opts ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
+					return nil, errors.New("access denied")
+				}
+			},
+			wantErr:     true,
+			errContains: "access denied",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient := &testutil.MockS3Client{}
+			if tt.mockFunc != nil {
+				tt.mockFunc(mockClient)
+			}
+
+			// Create uploader with mock client
+			uploader := New(mockClient)
+
+			ctx := context.Background()
+			startTime := time.Now()
+
+			// Test the uploadSimple method directly
+			result, err := uploader.uploadSimple(ctx, tt.bucket, tt.key, tt.data, tt.config, startTime)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, result)
+				assert.Equal(t, tt.key, result.Key)
+				assert.Equal(t, int64(len(tt.data)), result.Size)
+				assert.NotEmpty(t, result.ETag)
+				assert.NotZero(t, result.Duration)
+			}
+		})
+	}
+}
+
+// Helper function to create a temporary file for testing
+func createTempFile(t *testing.T, content string) string {
+	tmpFile, err := os.CreateTemp("", "test-*.txt")
+	require.NoError(t, err)
+
+	_, err = tmpFile.WriteString(content)
+	require.NoError(t, err)
+
+	err = tmpFile.Close()
+	require.NoError(t, err)
+
+	return tmpFile.Name()
+}
