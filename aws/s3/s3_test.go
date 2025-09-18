@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -16,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	s3errors "github.com/input-output-hk/catalyst-forge-libs/aws/s3/errors"
 	"github.com/input-output-hk/catalyst-forge-libs/aws/s3/internal/testutil"
 	"github.com/input-output-hk/catalyst-forge-libs/aws/s3/s3types"
 )
@@ -1324,6 +1326,261 @@ func TestClient_ListAll_WithMock(t *testing.T) {
 			// For now, we just verify the basic structure works
 			assert.NotNil(t, objectsChan)
 			_ = receivedError // In real implementation, we'd check this
+		})
+	}
+}
+
+// Bucket Operations Tests
+
+// TestClient_CreateBucket_WithMock tests the CreateBucket method with mocked S3 client.
+func TestClient_CreateBucket_WithMock(t *testing.T) {
+	tests := []struct {
+		name      string
+		bucket    string
+		opts      []s3types.BucketOption
+		setupMock func(*testutil.MockS3Client)
+		wantErr   bool
+		errType   error
+	}{
+		{
+			name:   "successful bucket creation",
+			bucket: "test-bucket",
+			setupMock: func(m *testutil.MockS3Client) {
+				m.CreateBucketFunc = func(ctx context.Context, params *s3.CreateBucketInput, optFns ...func(*s3.Options)) (*s3.CreateBucketOutput, error) {
+					// Verify the input parameters
+					assert.Equal(t, "test-bucket", aws.ToString(params.Bucket))
+
+					return &s3.CreateBucketOutput{}, nil
+				}
+			},
+			wantErr: false,
+		},
+		{
+			name:   "bucket creation with region",
+			bucket: "test-bucket-region",
+			opts: []s3types.BucketOption{
+				WithBucketRegion("us-west-2"),
+			},
+			setupMock: func(m *testutil.MockS3Client) {
+				m.CreateBucketFunc = func(ctx context.Context, params *s3.CreateBucketInput, optFns ...func(*s3.Options)) (*s3.CreateBucketOutput, error) {
+					// Verify the input parameters
+					assert.Equal(t, "test-bucket-region", aws.ToString(params.Bucket))
+					assert.NotNil(t, params.CreateBucketConfiguration)
+					assert.Equal(t, "us-west-2", string(params.CreateBucketConfiguration.LocationConstraint))
+
+					return &s3.CreateBucketOutput{}, nil
+				}
+			},
+			wantErr: false,
+		},
+		{
+			name:   "bucket already exists",
+			bucket: "existing-bucket",
+			setupMock: func(m *testutil.MockS3Client) {
+				m.CreateBucketFunc = func(ctx context.Context, params *s3.CreateBucketInput, optFns ...func(*s3.Options)) (*s3.CreateBucketOutput, error) {
+					return nil, &types.BucketAlreadyExists{}
+				}
+			},
+			wantErr: true,
+			errType: s3errors.ErrBucketAlreadyExists,
+		},
+		{
+			name:   "invalid bucket name",
+			bucket: "",
+			setupMock: func(m *testutil.MockS3Client) {
+				m.CreateBucketFunc = func(ctx context.Context, params *s3.CreateBucketInput, optFns ...func(*s3.Options)) (*s3.CreateBucketOutput, error) {
+					return nil, nil
+				}
+			},
+			wantErr: true,
+			errType: s3errors.ErrInvalidBucketName,
+		},
+		{
+			name:   "DNS non-compliant bucket name",
+			bucket: "Invalid_Bucket_Name!",
+			setupMock: func(m *testutil.MockS3Client) {
+				m.CreateBucketFunc = func(ctx context.Context, params *s3.CreateBucketInput, optFns ...func(*s3.Options)) (*s3.CreateBucketOutput, error) {
+					return nil, nil
+				}
+			},
+			wantErr: true,
+			errType: s3errors.ErrInvalidBucketName,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient := &testutil.MockS3Client{}
+			if tt.setupMock != nil {
+				tt.setupMock(mockClient)
+			}
+
+			client := NewWithClient(mockClient)
+
+			err := client.CreateBucket(context.Background(), tt.bucket, tt.opts...)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errType != nil {
+					assert.ErrorIs(t, err, tt.errType)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestClient_DeleteBucket_WithMock tests the DeleteBucket method with mocked S3 client.
+func TestClient_DeleteBucket_WithMock(t *testing.T) {
+	tests := []struct {
+		name      string
+		bucket    string
+		setupMock func(*testutil.MockS3Client)
+		wantErr   bool
+		errType   error
+	}{
+		{
+			name:   "successful bucket deletion",
+			bucket: "test-bucket",
+			setupMock: func(m *testutil.MockS3Client) {
+				m.DeleteBucketFunc = func(ctx context.Context, params *s3.DeleteBucketInput, optFns ...func(*s3.Options)) (*s3.DeleteBucketOutput, error) {
+					// Verify the input parameters
+					assert.Equal(t, "test-bucket", aws.ToString(params.Bucket))
+
+					return &s3.DeleteBucketOutput{}, nil
+				}
+			},
+			wantErr: false,
+		},
+		{
+			name:   "bucket not found",
+			bucket: "nonexistent-bucket",
+			setupMock: func(m *testutil.MockS3Client) {
+				m.DeleteBucketFunc = func(ctx context.Context, params *s3.DeleteBucketInput, optFns ...func(*s3.Options)) (*s3.DeleteBucketOutput, error) {
+					return nil, &types.NoSuchBucket{}
+				}
+			},
+			wantErr: true,
+			errType: s3errors.ErrBucketNotFound,
+		},
+		{
+			name:   "bucket not empty",
+			bucket: "non-empty-bucket",
+			setupMock: func(m *testutil.MockS3Client) {
+				m.DeleteBucketFunc = func(ctx context.Context, params *s3.DeleteBucketInput, optFns ...func(*s3.Options)) (*s3.DeleteBucketOutput, error) {
+					// Return a generic error that simulates the AWS SDK behavior
+					return nil, fmt.Errorf("BucketNotEmpty: The bucket you tried to delete is not empty")
+				}
+			},
+			wantErr: true,
+			errType: s3errors.ErrBucketNotEmpty,
+		},
+		{
+			name:   "empty bucket name",
+			bucket: "",
+			setupMock: func(m *testutil.MockS3Client) {
+				m.DeleteBucketFunc = func(ctx context.Context, params *s3.DeleteBucketInput, optFns ...func(*s3.Options)) (*s3.DeleteBucketOutput, error) {
+					return nil, nil
+				}
+			},
+			wantErr: true,
+			errType: s3errors.ErrInvalidBucketName,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient := &testutil.MockS3Client{}
+			if tt.setupMock != nil {
+				tt.setupMock(mockClient)
+			}
+
+			client := NewWithClient(mockClient)
+
+			err := client.DeleteBucket(context.Background(), tt.bucket)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errType != nil {
+					assert.ErrorIs(t, err, tt.errType)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestClient_BucketNameValidation tests bucket name validation logic.
+func TestClient_BucketNameValidation(t *testing.T) {
+	tests := []struct {
+		name       string
+		bucket     string
+		shouldFail bool
+	}{
+		{"valid simple name", "mybucket", false},
+		{"valid with numbers", "mybucket123", false},
+		{"valid with dots", "my.bucket.name", false},
+		{"valid with hyphens", "my-bucket-name", false},
+		{"too short for valid minimum", "ab", true},
+		{"valid length maximum", "mybucketnameisverylongandshouldstillwork123456789", false},
+		{"empty name", "", true},
+		{"too short", "a", true},
+		{"too long", "mybucketnameiswaytoolongandshouldfailthevalidationcheck12345678901234567890", true},
+		{"starts with dot", ".mybucket", true},
+		{"ends with dot", "mybucket.", true},
+		{"starts with hyphen", "-mybucket", true},
+		{"ends with hyphen", "mybucket-", true},
+		{"contains uppercase", "MyBucket", true},
+		{"contains underscore", "my_bucket", true},
+		{"contains space", "my bucket", true},
+		{"starts with number", "1mybucket", true},
+		{"contains special chars", "my@bucket", true},
+		{"IP address format", "192.168.1.1", true},
+		{"localhost", "localhost", true},
+		{"double dots", "my..bucket", true},
+		{"double hyphens", "my--bucket", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient := &testutil.MockS3Client{}
+			client := NewWithClient(mockClient)
+
+			// Test CreateBucket validation
+			err := client.CreateBucket(context.Background(), tt.bucket)
+			if tt.shouldFail {
+				assert.Error(t, err, "CreateBucket should fail for invalid bucket name: %s", tt.bucket)
+				assert.ErrorIs(
+					t,
+					err,
+					s3errors.ErrInvalidBucketName,
+					"CreateBucket should return ErrInvalidBucketName for: %s",
+					tt.bucket,
+				)
+			} else if err != nil {
+				// For valid names, we expect the mock to be called, but since we haven't set it up,
+				// it should fail with a different error (not validation error)
+				assert.NotErrorIs(t, err, s3errors.ErrInvalidBucketName, "CreateBucket should not return ErrInvalidBucketName for valid name: %s", tt.bucket)
+			}
+
+			// Test DeleteBucket validation
+			err = client.DeleteBucket(context.Background(), tt.bucket)
+			if tt.shouldFail {
+				assert.Error(t, err, "DeleteBucket should fail for invalid bucket name: %s", tt.bucket)
+				assert.ErrorIs(
+					t,
+					err,
+					s3errors.ErrInvalidBucketName,
+					"DeleteBucket should return ErrInvalidBucketName for: %s",
+					tt.bucket,
+				)
+			} else if err != nil {
+				// For valid names, we expect the mock to be called, but since we haven't set it up,
+				// it should fail with a different error (not validation error)
+				assert.NotErrorIs(t, err, s3errors.ErrInvalidBucketName, "DeleteBucket should not return ErrInvalidBucketName for valid name: %s", tt.bucket)
+			}
 		})
 	}
 }

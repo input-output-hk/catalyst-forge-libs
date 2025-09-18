@@ -243,3 +243,11 @@ func WithStartAfter(startAfter string) s3types.ListOption {
 		c.StartAfter = startAfter
 	}
 }
+
+// WithBucketRegion sets the region for bucket operations.
+// This is used to specify the region when creating buckets in regions other than us-east-1.
+func WithBucketRegion(region string) s3types.BucketOption {
+	return func(c *s3types.BucketOptionConfig) {
+		c.Region = region
+	}
+}

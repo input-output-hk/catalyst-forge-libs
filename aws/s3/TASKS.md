@@ -244,26 +244,26 @@ This implementation follows the architecture defined in [ARCHITECTURE.md](./ARCH
     - `golangci-lint run` reports zero errors
 
 ### 3.11 Bucket Operations Tests
-- [ ] **Write failing tests for bucket operations** [ARCHITECTURE.md § 3.2]
+- [x] **Write failing tests for bucket operations** [ARCHITECTURE.md § 3.2]
   - Write tests for CreateBucket() with regions
   - Write tests for DeleteBucket() validation
   - Write tests for bucket name validation
   - Success Criteria:
-    - Tests define region handling
-    - Tests verify error conditions
-    - Tests check DNS compliance
-    - All tests are failing (red phase of TDD)
+    - Tests define region handling ✅
+    - Tests verify error conditions ✅
+    - Tests check DNS compliance ✅
+    - All tests are failing (red phase of TDD) ✅
 
 ### 3.12 Bucket Operations Implementation
-- [ ] **Implement bucket management** [ARCHITECTURE.md § 3.2]
-  - Implement CreateBucket() with region handling
-  - Implement DeleteBucket() with validation
-  - Add bucket existence validation
+- [x] **Implement bucket management** [ARCHITECTURE.md § 3.2]
+  - Implement CreateBucket() with region handling ✅
+  - Implement DeleteBucket() with validation ✅
+  - Add bucket existence validation ✅
   - Success Criteria:
-    - All bucket operation tests pass
-    - Proper error for non-empty bucket deletion
-    - DNS-compliant bucket name validation
-    - `golangci-lint run` reports zero errors
+    - All bucket operation tests pass ✅
+    - Proper error for non-empty bucket deletion ✅
+    - DNS-compliant bucket name validation ✅
+    - `golangci-lint run` reports zero errors ✅
 
 ---
 

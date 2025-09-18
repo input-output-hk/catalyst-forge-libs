@@ -3,6 +3,7 @@ package s3
 
 import (
 	"context"
+	"errors"
 	"io"
 	"mime"
 	"path/filepath"
@@ -14,7 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/gabriel-vasile/mimetype"
 
-	"github.com/input-output-hk/catalyst-forge-libs/aws/s3/errors"
+	s3errors "github.com/input-output-hk/catalyst-forge-libs/aws/s3/errors"
 	"github.com/input-output-hk/catalyst-forge-libs/aws/s3/internal/operations/copy"
 	"github.com/input-output-hk/catalyst-forge-libs/aws/s3/internal/operations/download"
 	"github.com/input-output-hk/catalyst-forge-libs/aws/s3/internal/operations/upload"
@@ -36,19 +37,19 @@ func (c *Client) Upload(
 	opts ...s3types.UploadOption,
 ) (*s3types.UploadResult, error) {
 	if bucket == "" {
-		return nil, errors.NewError("upload", errors.ErrInvalidInput).
+		return nil, s3errors.NewError("upload", s3errors.ErrInvalidInput).
 			WithBucket(bucket).
 			WithKey(key).
 			WithMessage("bucket name cannot be empty")
 	}
 	if key == "" {
-		return nil, errors.NewError("upload", errors.ErrInvalidInput).
+		return nil, s3errors.NewError("upload", s3errors.ErrInvalidInput).
 			WithBucket(bucket).
 			WithKey(key).
 			WithMessage("object key cannot be empty")
 	}
 	if reader == nil {
-		return nil, errors.NewError("upload", errors.ErrInvalidInput).
+		return nil, s3errors.NewError("upload", s3errors.ErrInvalidInput).
 			WithBucket(bucket).
 			WithKey(key).
 			WithMessage("reader cannot be nil")
@@ -99,7 +100,7 @@ func (c *Client) Upload(
 
 	result, err := uploader.Upload(ctx, bucket, key, reader, internalConfig, startTime)
 	if err != nil {
-		return nil, errors.NewError("upload", err).WithBucket(bucket).WithKey(key)
+		return nil, s3errors.NewError("upload", err).WithBucket(bucket).WithKey(key)
 	}
 
 	return result, nil
@@ -113,19 +114,19 @@ func (c *Client) UploadFile(
 	opts ...s3types.UploadOption,
 ) (*s3types.UploadResult, error) {
 	if bucket == "" {
-		return nil, errors.NewError("uploadFile", errors.ErrInvalidInput).
+		return nil, s3errors.NewError("uploadFile", s3errors.ErrInvalidInput).
 			WithBucket(bucket).
 			WithKey(key).
 			WithMessage("bucket name cannot be empty")
 	}
 	if key == "" {
-		return nil, errors.NewError("uploadFile", errors.ErrInvalidInput).
+		return nil, s3errors.NewError("uploadFile", s3errors.ErrInvalidInput).
 			WithBucket(bucket).
 			WithKey(key).
 			WithMessage("object key cannot be empty")
 	}
 	if filepath == "" {
-		return nil, errors.NewError("uploadFile", errors.ErrInvalidInput).
+		return nil, s3errors.NewError("uploadFile", s3errors.ErrInvalidInput).
 			WithBucket(bucket).
 			WithKey(key).
 			WithMessage("filepath cannot be empty")
@@ -134,10 +135,10 @@ func (c *Client) UploadFile(
 	// Check if file exists and get its info
 	info, err := c.fs.Stat(filepath)
 	if err != nil {
-		return nil, errors.NewError("uploadFile", err).WithBucket(bucket).WithKey(key)
+		return nil, s3errors.NewError("uploadFile", err).WithBucket(bucket).WithKey(key)
 	}
 	if info.IsDir() {
-		return nil, errors.NewError("uploadFile", errors.ErrInvalidInput).
+		return nil, s3errors.NewError("uploadFile", s3errors.ErrInvalidInput).
 			WithBucket(bucket).
 			WithKey(key).
 			WithMessage("filepath points to a directory, not a file")
@@ -163,7 +164,7 @@ func (c *Client) UploadFile(
 	// Open the file
 	file, err := c.fs.Open(filepath)
 	if err != nil {
-		return nil, errors.NewError("uploadFile", err).WithBucket(bucket).WithKey(key)
+		return nil, s3errors.NewError("uploadFile", err).WithBucket(bucket).WithKey(key)
 	}
 	defer file.Close()
 
@@ -195,7 +196,7 @@ func (c *Client) UploadFile(
 
 	result, err := uploader.UploadFile(ctx, bucket, key, file, size, internalConfig, startTime)
 	if err != nil {
-		return nil, errors.NewError("uploadFile", err).WithBucket(bucket).WithKey(key)
+		return nil, s3errors.NewError("uploadFile", err).WithBucket(bucket).WithKey(key)
 	}
 
 	return result, nil
@@ -205,13 +206,13 @@ func (c *Client) UploadFile(
 // This is a convenience method for small amounts of data that fit in memory.
 func (c *Client) Put(ctx context.Context, bucket, key string, data []byte, opts ...s3types.UploadOption) error {
 	if bucket == "" {
-		return errors.NewError("put", errors.ErrInvalidInput).
+		return s3errors.NewError("put", s3errors.ErrInvalidInput).
 			WithBucket(bucket).
 			WithKey(key).
 			WithMessage("bucket name cannot be empty")
 	}
 	if key == "" {
-		return errors.NewError("put", errors.ErrInvalidInput).
+		return s3errors.NewError("put", s3errors.ErrInvalidInput).
 			WithBucket(bucket).
 			WithKey(key).
 			WithMessage("object key cannot be empty")
@@ -261,7 +262,7 @@ func (c *Client) Put(ctx context.Context, bucket, key string, data []byte, opts 
 
 	result, err := uploader.UploadSimple(ctx, bucket, key, data, internalConfig, startTime)
 	if err != nil {
-		return errors.NewError("put", err).WithBucket(bucket).WithKey(key)
+		return s3errors.NewError("put", err).WithBucket(bucket).WithKey(key)
 	}
 
 	// Put doesn't return a result, just the error
@@ -279,19 +280,19 @@ func (c *Client) Download(
 	opts ...s3types.DownloadOption,
 ) (*s3types.DownloadResult, error) {
 	if bucket == "" {
-		return nil, errors.NewError("download", errors.ErrInvalidInput).
+		return nil, s3errors.NewError("download", s3errors.ErrInvalidInput).
 			WithBucket(bucket).
 			WithKey(key).
 			WithMessage("bucket name cannot be empty")
 	}
 	if key == "" {
-		return nil, errors.NewError("download", errors.ErrInvalidInput).
+		return nil, s3errors.NewError("download", s3errors.ErrInvalidInput).
 			WithBucket(bucket).
 			WithKey(key).
 			WithMessage("object key cannot be empty")
 	}
 	if writer == nil {
-		return nil, errors.NewError("download", errors.ErrInvalidInput).
+		return nil, s3errors.NewError("download", s3errors.ErrInvalidInput).
 			WithBucket(bucket).
 			WithKey(key).
 			WithMessage("writer cannot be nil")
@@ -314,7 +315,7 @@ func (c *Client) Download(
 
 	result, err := downloader.Download(ctx, bucket, key, writer, internalConfig, startTime)
 	if err != nil {
-		return nil, errors.NewError("download", err).WithBucket(bucket).WithKey(key)
+		return nil, s3errors.NewError("download", err).WithBucket(bucket).WithKey(key)
 	}
 
 	return result, nil
@@ -329,19 +330,19 @@ func (c *Client) DownloadFile(
 	opts ...s3types.DownloadOption,
 ) (*s3types.DownloadResult, error) {
 	if bucket == "" {
-		return nil, errors.NewError("downloadFile", errors.ErrInvalidInput).
+		return nil, s3errors.NewError("downloadFile", s3errors.ErrInvalidInput).
 			WithBucket(bucket).
 			WithKey(key).
 			WithMessage("bucket name cannot be empty")
 	}
 	if key == "" {
-		return nil, errors.NewError("downloadFile", errors.ErrInvalidInput).
+		return nil, s3errors.NewError("downloadFile", s3errors.ErrInvalidInput).
 			WithBucket(bucket).
 			WithKey(key).
 			WithMessage("object key cannot be empty")
 	}
 	if filepath == "" {
-		return nil, errors.NewError("downloadFile", errors.ErrInvalidInput).
+		return nil, s3errors.NewError("downloadFile", s3errors.ErrInvalidInput).
 			WithBucket(bucket).
 			WithKey(key).
 			WithMessage("filepath cannot be empty")
@@ -364,7 +365,7 @@ func (c *Client) DownloadFile(
 
 	result, err := downloader.DownloadFile(ctx, bucket, key, filepath, internalConfig, startTime)
 	if err != nil {
-		return nil, errors.NewError("downloadFile", err).WithBucket(bucket).WithKey(key)
+		return nil, s3errors.NewError("downloadFile", err).WithBucket(bucket).WithKey(key)
 	}
 
 	return result, nil
@@ -375,13 +376,13 @@ func (c *Client) DownloadFile(
 // For large objects, use Download or DownloadFile instead.
 func (c *Client) Get(ctx context.Context, bucket, key string, opts ...s3types.DownloadOption) ([]byte, error) {
 	if bucket == "" {
-		return nil, errors.NewError("get", errors.ErrInvalidInput).
+		return nil, s3errors.NewError("get", s3errors.ErrInvalidInput).
 			WithBucket(bucket).
 			WithKey(key).
 			WithMessage("bucket name cannot be empty")
 	}
 	if key == "" {
-		return nil, errors.NewError("get", errors.ErrInvalidInput).
+		return nil, s3errors.NewError("get", s3errors.ErrInvalidInput).
 			WithBucket(bucket).
 			WithKey(key).
 			WithMessage("object key cannot be empty")
@@ -404,7 +405,7 @@ func (c *Client) Get(ctx context.Context, bucket, key string, opts ...s3types.Do
 
 	data, err := downloader.Get(ctx, bucket, key, internalConfig, startTime)
 	if err != nil {
-		return nil, errors.NewError("get", err).WithBucket(bucket).WithKey(key)
+		return nil, s3errors.NewError("get", err).WithBucket(bucket).WithKey(key)
 	}
 
 	return data, nil
@@ -450,7 +451,7 @@ func (c *Client) List(
 	opts ...s3types.ListOption,
 ) (*s3types.ListResult, error) {
 	if bucket == "" {
-		return nil, errors.NewError("list", errors.ErrInvalidInput).
+		return nil, s3errors.NewError("list", s3errors.ErrInvalidInput).
 			WithBucket(bucket).
 			WithMessage("bucket name cannot be empty")
 	}
@@ -484,7 +485,7 @@ func (c *Client) List(
 	// Perform the list operation
 	result, err := c.s3Client.ListObjectsV2(ctx, input)
 	if err != nil {
-		return nil, errors.NewError("list", err).WithBucket(bucket)
+		return nil, s3errors.NewError("list", err).WithBucket(bucket)
 	}
 
 	// Convert the result to our internal types
@@ -593,13 +594,13 @@ func (c *Client) ListAll(ctx context.Context, bucket, prefix string) <-chan s3ty
 // Returns an error if the operation fails.
 func (c *Client) Delete(ctx context.Context, bucket, key string) error {
 	if bucket == "" {
-		return errors.NewError("delete", errors.ErrInvalidInput).
+		return s3errors.NewError("delete", s3errors.ErrInvalidInput).
 			WithBucket(bucket).
 			WithKey(key).
 			WithMessage("bucket name cannot be empty")
 	}
 	if key == "" {
-		return errors.NewError("delete", errors.ErrInvalidInput).
+		return s3errors.NewError("delete", s3errors.ErrInvalidInput).
 			WithBucket(bucket).
 			WithKey(key).
 			WithMessage("object key cannot be empty")
@@ -612,7 +613,7 @@ func (c *Client) Delete(ctx context.Context, bucket, key string) error {
 
 	_, err := c.s3Client.DeleteObject(ctx, input)
 	if err != nil {
-		return errors.NewError("delete", err).WithBucket(bucket).WithKey(key)
+		return s3errors.NewError("delete", err).WithBucket(bucket).WithKey(key)
 	}
 
 	return nil
@@ -623,12 +624,12 @@ func (c *Client) Delete(ctx context.Context, bucket, key string) error {
 // Returns a DeleteResult containing information about successful and failed deletions.
 func (c *Client) DeleteMany(ctx context.Context, bucket string, keys []string) (*s3types.DeleteResult, error) {
 	if bucket == "" {
-		return nil, errors.NewError("deleteMany", errors.ErrInvalidInput).
+		return nil, s3errors.NewError("deleteMany", s3errors.ErrInvalidInput).
 			WithBucket(bucket).
 			WithMessage("bucket name cannot be empty")
 	}
 	if len(keys) == 0 {
-		return nil, errors.NewError("deleteMany", errors.ErrInvalidInput).
+		return nil, s3errors.NewError("deleteMany", s3errors.ErrInvalidInput).
 			WithBucket(bucket).
 			WithMessage("keys cannot be empty")
 	}
@@ -636,7 +637,7 @@ func (c *Client) DeleteMany(ctx context.Context, bucket string, keys []string) (
 	// S3 allows up to 1000 objects per delete request
 	const maxKeysPerRequest = 1000
 	if len(keys) > maxKeysPerRequest {
-		return nil, errors.NewError("deleteMany", errors.ErrInvalidInput).
+		return nil, s3errors.NewError("deleteMany", s3errors.ErrInvalidInput).
 			WithBucket(bucket).
 			WithMessage("too many keys: maximum is 1000 per request")
 	}
@@ -647,7 +648,7 @@ func (c *Client) DeleteMany(ctx context.Context, bucket string, keys []string) (
 	deleteObjects := make([]types.ObjectIdentifier, 0, len(keys))
 	for _, key := range keys {
 		if key == "" {
-			return nil, errors.NewError("deleteMany", errors.ErrInvalidInput).
+			return nil, s3errors.NewError("deleteMany", s3errors.ErrInvalidInput).
 				WithBucket(bucket).
 				WithMessage("empty key in keys slice")
 		}
@@ -665,7 +666,7 @@ func (c *Client) DeleteMany(ctx context.Context, bucket string, keys []string) (
 
 	result, err := c.s3Client.DeleteObjects(ctx, input)
 	if err != nil {
-		return nil, errors.NewError("deleteMany", err).WithBucket(bucket)
+		return nil, s3errors.NewError("deleteMany", err).WithBucket(bucket)
 	}
 
 	// Process the result
@@ -704,13 +705,13 @@ func (c *Client) DeleteMany(ctx context.Context, bucket string, keys []string) (
 // Returns an error for other types of failures (network issues, permissions, etc.).
 func (c *Client) Exists(ctx context.Context, bucket, key string) (bool, error) {
 	if bucket == "" {
-		return false, errors.NewError("exists", errors.ErrInvalidInput).
+		return false, s3errors.NewError("exists", s3errors.ErrInvalidInput).
 			WithBucket(bucket).
 			WithKey(key).
 			WithMessage("bucket name cannot be empty")
 	}
 	if key == "" {
-		return false, errors.NewError("exists", errors.ErrInvalidInput).
+		return false, s3errors.NewError("exists", s3errors.ErrInvalidInput).
 			WithBucket(bucket).
 			WithKey(key).
 			WithMessage("object key cannot be empty")
@@ -728,7 +729,7 @@ func (c *Client) Exists(ctx context.Context, bucket, key string) (bool, error) {
 		if strings.Contains(errMsg, "NotFound") || strings.Contains(errMsg, "NoSuchKey") {
 			return false, nil
 		}
-		return false, errors.NewError("exists", err).WithBucket(bucket).WithKey(key)
+		return false, s3errors.NewError("exists", err).WithBucket(bucket).WithKey(key)
 	}
 
 	return true, nil
@@ -738,13 +739,13 @@ func (c *Client) Exists(ctx context.Context, bucket, key string) (bool, error) {
 // This is more efficient than Get() for metadata-only operations.
 func (c *Client) GetMetadata(ctx context.Context, bucket, key string) (*s3types.ObjectMetadata, error) {
 	if bucket == "" {
-		return nil, errors.NewError("getMetadata", errors.ErrInvalidInput).
+		return nil, s3errors.NewError("getMetadata", s3errors.ErrInvalidInput).
 			WithBucket(bucket).
 			WithKey(key).
 			WithMessage("bucket name cannot be empty")
 	}
 	if key == "" {
-		return nil, errors.NewError("getMetadata", errors.ErrInvalidInput).
+		return nil, s3errors.NewError("getMetadata", s3errors.ErrInvalidInput).
 			WithBucket(bucket).
 			WithKey(key).
 			WithMessage("object key cannot be empty")
@@ -757,7 +758,7 @@ func (c *Client) GetMetadata(ctx context.Context, bucket, key string) (*s3types.
 
 	result, err := c.s3Client.HeadObject(ctx, input)
 	if err != nil {
-		return nil, errors.NewError("getMetadata", err).WithBucket(bucket).WithKey(key)
+		return nil, s3errors.NewError("getMetadata", err).WithBucket(bucket).WithKey(key)
 	}
 
 	metadata := &s3types.ObjectMetadata{
@@ -783,25 +784,25 @@ func (c *Client) GetMetadata(ctx context.Context, bucket, key string) (*s3types.
 // For large objects, this automatically uses multipart copy operations.
 func (c *Client) Copy(ctx context.Context, srcBucket, srcKey, dstBucket, dstKey string) error {
 	if srcBucket == "" {
-		return errors.NewError("copy", errors.ErrInvalidInput).
+		return s3errors.NewError("copy", s3errors.ErrInvalidInput).
 			WithBucket(srcBucket).
 			WithKey(srcKey).
 			WithMessage("source bucket name cannot be empty")
 	}
 	if srcKey == "" {
-		return errors.NewError("copy", errors.ErrInvalidInput).
+		return s3errors.NewError("copy", s3errors.ErrInvalidInput).
 			WithBucket(srcBucket).
 			WithKey(srcKey).
 			WithMessage("source object key cannot be empty")
 	}
 	if dstBucket == "" {
-		return errors.NewError("copy", errors.ErrInvalidInput).
+		return s3errors.NewError("copy", s3errors.ErrInvalidInput).
 			WithBucket(dstBucket).
 			WithKey(dstKey).
 			WithMessage("destination bucket name cannot be empty")
 	}
 	if dstKey == "" {
-		return errors.NewError("copy", errors.ErrInvalidInput).
+		return s3errors.NewError("copy", s3errors.ErrInvalidInput).
 			WithBucket(dstBucket).
 			WithKey(dstKey).
 			WithMessage("destination object key cannot be empty")
@@ -809,7 +810,7 @@ func (c *Client) Copy(ctx context.Context, srcBucket, srcKey, dstBucket, dstKey 
 
 	// Prevent copying to the same location
 	if srcBucket == dstBucket && srcKey == dstKey {
-		return errors.NewError("copy", errors.ErrInvalidInput).
+		return s3errors.NewError("copy", s3errors.ErrInvalidInput).
 			WithBucket(srcBucket).
 			WithKey(srcKey).
 			WithMessage("cannot copy object to itself")
@@ -819,7 +820,7 @@ func (c *Client) Copy(ctx context.Context, srcBucket, srcKey, dstBucket, dstKey 
 	copier := copy.NewCopier(c.s3Client)
 	err := copier.Copy(ctx, srcBucket, srcKey, dstBucket, dstKey, nil)
 	if err != nil {
-		return errors.NewError("copy", err).
+		return s3errors.NewError("copy", err).
 			WithBucket(dstBucket).
 			WithKey(dstKey).
 			WithMessage("failed to copy from " + srcBucket + "/" + srcKey)
@@ -831,25 +832,25 @@ func (c *Client) Copy(ctx context.Context, srcBucket, srcKey, dstBucket, dstKey 
 // This operation is atomic for the destination but not for the source (copy-then-delete pattern).
 func (c *Client) Move(ctx context.Context, srcBucket, srcKey, dstBucket, dstKey string) error {
 	if srcBucket == "" {
-		return errors.NewError("move", errors.ErrInvalidInput).
+		return s3errors.NewError("move", s3errors.ErrInvalidInput).
 			WithBucket(srcBucket).
 			WithKey(srcKey).
 			WithMessage("source bucket name cannot be empty")
 	}
 	if srcKey == "" {
-		return errors.NewError("move", errors.ErrInvalidInput).
+		return s3errors.NewError("move", s3errors.ErrInvalidInput).
 			WithBucket(srcBucket).
 			WithKey(srcKey).
 			WithMessage("source object key cannot be empty")
 	}
 	if dstBucket == "" {
-		return errors.NewError("move", errors.ErrInvalidInput).
+		return s3errors.NewError("move", s3errors.ErrInvalidInput).
 			WithBucket(dstBucket).
 			WithKey(dstKey).
 			WithMessage("destination bucket name cannot be empty")
 	}
 	if dstKey == "" {
-		return errors.NewError("move", errors.ErrInvalidInput).
+		return s3errors.NewError("move", s3errors.ErrInvalidInput).
 			WithBucket(dstBucket).
 			WithKey(dstKey).
 			WithMessage("destination object key cannot be empty")
@@ -857,7 +858,7 @@ func (c *Client) Move(ctx context.Context, srcBucket, srcKey, dstBucket, dstKey 
 
 	// Prevent moving to the same location
 	if srcBucket == dstBucket && srcKey == dstKey {
-		return errors.NewError("move", errors.ErrInvalidInput).
+		return s3errors.NewError("move", s3errors.ErrInvalidInput).
 			WithBucket(srcBucket).
 			WithKey(srcKey).
 			WithMessage("cannot move object to itself")
@@ -866,7 +867,7 @@ func (c *Client) Move(ctx context.Context, srcBucket, srcKey, dstBucket, dstKey 
 	// First copy the object
 	err := c.Copy(ctx, srcBucket, srcKey, dstBucket, dstKey)
 	if err != nil {
-		return errors.NewError("move", err).
+		return s3errors.NewError("move", err).
 			WithBucket(srcBucket).
 			WithKey(srcKey).
 			WithMessage("failed to copy object during move")
@@ -875,13 +876,244 @@ func (c *Client) Move(ctx context.Context, srcBucket, srcKey, dstBucket, dstKey 
 	// Then delete the original
 	err = c.Delete(ctx, srcBucket, srcKey)
 	if err != nil {
-		return errors.NewError("move", err).
+		return s3errors.NewError("move", err).
 			WithBucket(srcBucket).
 			WithKey(srcKey).
 			WithMessage("failed to delete original object after copy")
 	}
 
 	return nil
+}
+
+// CreateBucket creates a new S3 bucket.
+// The bucket name must be DNS-compliant and unique across all existing bucket names in S3.
+// Use opts to specify the region where the bucket should be created.
+func (c *Client) CreateBucket(ctx context.Context, bucket string, opts ...s3types.BucketOption) error {
+	// Validate bucket name
+	if err := c.validateBucketName(bucket); err != nil {
+		return err
+	}
+
+	// Apply bucket options
+	config := &s3types.BucketOptionConfig{}
+	for _, opt := range opts {
+		opt(config)
+	}
+
+	// Build the create bucket request
+	input := &s3.CreateBucketInput{
+		Bucket: aws.String(bucket),
+	}
+
+	// Set region if specified
+	if config.Region != "" {
+		input.CreateBucketConfiguration = &types.CreateBucketConfiguration{
+			LocationConstraint: types.BucketLocationConstraint(config.Region),
+		}
+	}
+
+	_, err := c.s3Client.CreateBucket(ctx, input)
+	if err != nil {
+		return s3errors.NewError("createBucket", c.convertAWSError(err)).WithBucket(bucket)
+	}
+
+	return nil
+}
+
+// DeleteBucket deletes an S3 bucket.
+// The bucket must be empty before it can be deleted.
+// Returns an error if the bucket doesn't exist or is not empty.
+func (c *Client) DeleteBucket(ctx context.Context, bucket string) error {
+	// Validate bucket name
+	if err := c.validateBucketName(bucket); err != nil {
+		return err
+	}
+
+	input := &s3.DeleteBucketInput{
+		Bucket: aws.String(bucket),
+	}
+
+	_, err := c.s3Client.DeleteBucket(ctx, input)
+	if err != nil {
+		return s3errors.NewError("deleteBucket", c.convertAWSError(err)).WithBucket(bucket)
+	}
+
+	return nil
+}
+
+// validateBucketName validates that a bucket name is DNS-compliant according to AWS S3 rules.
+// Returns ErrInvalidBucketName if the bucket name is invalid.
+func (c *Client) validateBucketName(bucket string) error {
+	if err := c.validateBucketNameBasics(bucket); err != nil {
+		return err
+	}
+
+	if err := c.validateBucketNameCharacters(bucket); err != nil {
+		return err
+	}
+
+	if err := c.validateBucketNameStructure(bucket); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validateBucketNameBasics validates basic bucket name requirements
+func (c *Client) validateBucketNameBasics(bucket string) error {
+	if bucket == "" {
+		return s3errors.NewError("validateBucketName", s3errors.ErrInvalidBucketName).
+			WithBucket(bucket).
+			WithMessage("bucket name cannot be empty")
+	}
+
+	// Bucket names must be between 3 and 63 characters long
+	if len(bucket) < 3 || len(bucket) > 63 {
+		return s3errors.NewError("validateBucketName", s3errors.ErrInvalidBucketName).
+			WithBucket(bucket).
+			WithMessage("bucket name must be between 3 and 63 characters long")
+	}
+
+	return nil
+}
+
+// validateBucketNameCharacters validates allowed characters in bucket names
+func (c *Client) validateBucketNameCharacters(bucket string) error {
+	// Bucket names can consist only of lowercase letters, numbers, dots (.), and hyphens (-)
+	for _, char := range bucket {
+		if !c.isValidBucketChar(char) {
+			return s3errors.NewError("validateBucketName", s3errors.ErrInvalidBucketName).
+				WithBucket(bucket).
+				WithMessage("bucket name can only contain lowercase letters, numbers, dots, and hyphens")
+		}
+	}
+
+	return nil
+}
+
+// isValidBucketChar checks if a character is valid in a bucket name
+func (c *Client) isValidBucketChar(char rune) bool {
+	return (char >= '0' && char <= '9') || (char >= 'a' && char <= 'z') || char == '.' || char == '-'
+}
+
+// validateBucketNameStructure validates bucket name structural requirements
+func (c *Client) validateBucketNameStructure(bucket string) error {
+	// Bucket names must not start or end with a hyphen or dot
+	if bucket[0] == '-' || bucket[0] == '.' || bucket[len(bucket)-1] == '-' || bucket[len(bucket)-1] == '.' {
+		return s3errors.NewError("validateBucketName", s3errors.ErrInvalidBucketName).
+			WithBucket(bucket).
+			WithMessage("bucket name cannot start or end with a hyphen or dot")
+	}
+
+	// Bucket names cannot start with a number
+	if bucket[0] >= '0' && bucket[0] <= '9' {
+		return s3errors.NewError("validateBucketName", s3errors.ErrInvalidBucketName).
+			WithBucket(bucket).
+			WithMessage("bucket name cannot start with a number")
+	}
+
+	// Bucket names cannot contain two adjacent periods or hyphens
+	if c.hasAdjacentSpecialChars(bucket) {
+		return s3errors.NewError("validateBucketName", s3errors.ErrInvalidBucketName).
+			WithBucket(bucket).
+			WithMessage("bucket name cannot contain two adjacent periods or hyphens")
+	}
+
+	// Bucket names cannot be formatted as an IP address
+	if c.isIPAddress(bucket) {
+		return s3errors.NewError("validateBucketName", s3errors.ErrInvalidBucketName).
+			WithBucket(bucket).
+			WithMessage("bucket name cannot be formatted as an IP address")
+	}
+
+	// Bucket names cannot be reserved words
+	if c.isReservedWord(bucket) {
+		return s3errors.NewError("validateBucketName", s3errors.ErrInvalidBucketName).
+			WithBucket(bucket).
+			WithMessage("bucket name cannot be a reserved word")
+	}
+
+	return nil
+}
+
+// hasAdjacentSpecialChars checks for adjacent special characters
+func (c *Client) hasAdjacentSpecialChars(bucket string) bool {
+	for i := 0; i < len(bucket)-1; i++ {
+		if (bucket[i] == '.' && bucket[i+1] == '.') || (bucket[i] == '-' && bucket[i+1] == '-') {
+			return true
+		}
+	}
+	return false
+}
+
+// isReservedWord checks if bucket name is a reserved word
+func (c *Client) isReservedWord(bucket string) bool {
+	reservedWords := []string{"localhost"}
+	for _, word := range reservedWords {
+		if bucket == word {
+			return true
+		}
+	}
+	return false
+}
+
+// isIPAddress checks if a string is formatted as an IP address
+func (c *Client) isIPAddress(s string) bool {
+	parts := strings.Split(s, ".")
+	if len(parts) != 4 {
+		return false
+	}
+
+	for _, part := range parts {
+		if len(part) == 0 {
+			return true // Empty part indicates IP-like format (e.g., "192.168..1")
+		}
+		// Check if each part is a valid number 0-255
+		num := 0
+		for _, char := range part {
+			if char < '0' || char > '9' {
+				return false
+			}
+			num = num*10 + int(char-'0')
+		}
+		if num > 255 {
+			return false
+		}
+	}
+
+	return true
+}
+
+// convertAWSError converts AWS SDK errors to our custom error types
+func (c *Client) convertAWSError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	// Check for specific AWS SDK error types
+	var bucketAlreadyExists *types.BucketAlreadyExists
+	if errors.As(err, &bucketAlreadyExists) {
+		return s3errors.ErrBucketAlreadyExists
+	}
+
+	var noSuchBucket *types.NoSuchBucket
+	if errors.As(err, &noSuchBucket) {
+		return s3errors.ErrBucketNotFound
+	}
+
+	// Check for error messages that contain specific error codes
+	errMsg := err.Error()
+	switch {
+	case strings.Contains(errMsg, "BucketNotEmpty"):
+		return s3errors.ErrBucketNotEmpty
+	case strings.Contains(errMsg, "BucketAlreadyExists"):
+		return s3errors.ErrBucketAlreadyExists
+	case strings.Contains(errMsg, "NoSuchBucket"):
+		return s3errors.ErrBucketNotFound
+	}
+
+	// Return the original error if we can't convert it
+	return err
 }
 
 // detectContentTypeFromExtension detects content type from file extension
