@@ -206,3 +206,40 @@ func WithRange(rangeSpec string) s3types.DownloadOption {
 		c.RangeSpec = rangeSpec
 	}
 }
+
+// WithPrefix sets the prefix filter for list operations.
+// Only objects with keys that start with this prefix will be returned.
+func WithPrefix(prefix string) s3types.ListOption {
+	return func(c *s3types.ListOptionConfig) {
+		c.Prefix = prefix
+	}
+}
+
+// WithDelimiter sets the delimiter for list operations.
+// This enables hierarchical listing where common prefixes are grouped together.
+// Common values are "/" for directory-like listings.
+func WithDelimiter(delimiter string) s3types.ListOption {
+	return func(c *s3types.ListOptionConfig) {
+		c.Delimiter = delimiter
+	}
+}
+
+// WithMaxKeys sets the maximum number of keys to return in a list operation.
+// This controls pagination size. Valid range is 1-1000.
+// Default is 1000 if not specified.
+func WithMaxKeys(maxKeys int32) s3types.ListOption {
+	return func(c *s3types.ListOptionConfig) {
+		if maxKeys > 0 && maxKeys <= 1000 {
+			c.MaxKeys = maxKeys
+		}
+	}
+}
+
+// WithStartAfter sets the starting point for list operations.
+// Only objects with keys that occur lexicographically after this value will be returned.
+// This is useful for pagination and resuming interrupted listings.
+func WithStartAfter(startAfter string) s3types.ListOption {
+	return func(c *s3types.ListOptionConfig) {
+		c.StartAfter = startAfter
+	}
+}
