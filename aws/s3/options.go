@@ -191,3 +191,18 @@ func WithUploadConcurrency(concurrency int) s3types.UploadOption {
 		}
 	}
 }
+
+// WithDownloadProgress sets a progress tracker for download operations.
+func WithDownloadProgress(tracker s3types.ProgressTracker) s3types.DownloadOption {
+	return func(c *s3types.DownloadOptionConfig) {
+		c.ProgressTracker = tracker
+	}
+}
+
+// WithRange sets a range specification for download operations.
+// The rangeSpec should be in HTTP Range header format (e.g., "bytes=0-1023").
+func WithRange(rangeSpec string) s3types.DownloadOption {
+	return func(c *s3types.DownloadOptionConfig) {
+		c.RangeSpec = rangeSpec
+	}
+}

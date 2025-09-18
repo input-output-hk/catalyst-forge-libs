@@ -20,6 +20,7 @@ type MockS3Client struct {
 	CopyObjectFunc              func(context.Context, *s3.CopyObjectInput, ...func(*s3.Options)) (*s3.CopyObjectOutput, error)
 	CreateMultipartUploadFunc   func(context.Context, *s3.CreateMultipartUploadInput, ...func(*s3.Options)) (*s3.CreateMultipartUploadOutput, error)
 	UploadPartFunc              func(context.Context, *s3.UploadPartInput, ...func(*s3.Options)) (*s3.UploadPartOutput, error)
+	UploadPartCopyFunc          func(context.Context, *s3.UploadPartCopyInput, ...func(*s3.Options)) (*s3.UploadPartCopyOutput, error)
 	CompleteMultipartUploadFunc func(context.Context, *s3.CompleteMultipartUploadInput, ...func(*s3.Options)) (*s3.CompleteMultipartUploadOutput, error)
 	AbortMultipartUploadFunc    func(context.Context, *s3.AbortMultipartUploadInput, ...func(*s3.Options)) (*s3.AbortMultipartUploadOutput, error)
 	CreateBucketFunc            func(context.Context, *s3.CreateBucketInput, ...func(*s3.Options)) (*s3.CreateBucketOutput, error)
@@ -132,6 +133,18 @@ func (m *MockS3Client) UploadPart(
 		return m.UploadPartFunc(ctx, params, optFns...)
 	}
 	return &s3.UploadPartOutput{}, nil
+}
+
+// UploadPartCopy mocks the S3 UploadPartCopy operation.
+func (m *MockS3Client) UploadPartCopy(
+	ctx context.Context,
+	params *s3.UploadPartCopyInput,
+	optFns ...func(*s3.Options),
+) (*s3.UploadPartCopyOutput, error) {
+	if m.UploadPartCopyFunc != nil {
+		return m.UploadPartCopyFunc(ctx, params, optFns...)
+	}
+	return &s3.UploadPartCopyOutput{}, nil
 }
 
 // CompleteMultipartUpload mocks the S3 CompleteMultipartUpload operation.

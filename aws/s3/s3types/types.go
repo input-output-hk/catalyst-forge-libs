@@ -191,6 +191,12 @@ type UploadConfig struct {
 	Concurrency     int
 }
 
+// DownloadConfig holds configuration for download operations.
+type DownloadConfig struct {
+	ProgressTracker ProgressTracker
+	RangeSpec       string // HTTP Range header specification
+}
+
 // UploadResult contains the result of an upload operation.
 type UploadResult struct {
 	// Key is the S3 object key that was uploaded

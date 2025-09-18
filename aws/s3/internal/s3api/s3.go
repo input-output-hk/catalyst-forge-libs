@@ -65,6 +65,13 @@ type S3API interface {
 		optFns ...func(*s3.Options),
 	) (*s3.UploadPartOutput, error)
 
+	// UploadPartCopy copies a part from a source object to a multipart upload
+	UploadPartCopy(
+		ctx context.Context,
+		params *s3.UploadPartCopyInput,
+		optFns ...func(*s3.Options),
+	) (*s3.UploadPartCopyOutput, error)
+
 	// CompleteMultipartUpload completes a multipart upload
 	CompleteMultipartUpload(
 		ctx context.Context,

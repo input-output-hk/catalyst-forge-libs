@@ -17,18 +17,21 @@ import (
 
 	"github.com/input-output-hk/catalyst-forge-libs/aws/s3/errors"
 	"github.com/input-output-hk/catalyst-forge-libs/aws/s3/internal/s3api"
+	"github.com/input-output-hk/catalyst-forge-libs/aws/s3/internal/transfer/multipart"
 	"github.com/input-output-hk/catalyst-forge-libs/aws/s3/s3types"
 )
 
 // Uploader handles S3 upload operations with automatic multipart detection.
 type Uploader struct {
-	s3Client s3api.S3API
+	s3Client        s3api.S3API
+	multipartClient *multipart.Uploader
 }
 
 // New creates a new Uploader instance.
 func New(s3Client s3api.S3API) *Uploader {
 	return &Uploader{
-		s3Client: s3Client,
+		s3Client:        s3Client,
+		multipartClient: multipart.NewUploader(s3Client),
 	}
 }
 
@@ -174,101 +177,10 @@ func (u *Uploader) uploadMultipart(
 	config *s3types.UploadConfig,
 	startTime time.Time,
 ) (*s3types.UploadResult, error) {
-	// Create multipart upload
-	createInput := &s3.CreateMultipartUploadInput{
-		Bucket:      aws.String(bucket),
-		Key:         aws.String(key),
-		ContentType: aws.String(config.ContentType),
-	}
-
-	if config.StorageClass != "" {
-		createInput.StorageClass = awstypes.StorageClass(config.StorageClass)
-	}
-
-	if len(config.Metadata) > 0 {
-		createInput.Metadata = config.Metadata
-	}
-
-	// Set SSE if configured
-	if config.SSE != nil {
-		switch config.SSE.Type {
-		case "AES256":
-			createInput.ServerSideEncryption = awstypes.ServerSideEncryptionAes256
-		case "aws:kms":
-			createInput.ServerSideEncryption = awstypes.ServerSideEncryptionAwsKms
-			if config.SSE.KMSKeyID != "" {
-				createInput.SSEKMSKeyId = aws.String(config.SSE.KMSKeyID)
-			}
-		default: // SSEC (customer-provided encryption)
-			if config.SSE.CustomerKey != "" {
-				createInput.ServerSideEncryption = awstypes.ServerSideEncryptionAes256
-				createInput.SSECustomerAlgorithm = aws.String(string(config.SSE.Type))
-				createInput.SSECustomerKey = aws.String(config.SSE.CustomerKey)
-				createInput.SSECustomerKeyMD5 = aws.String(config.SSE.CustomerKeyMD5)
-			}
-		}
-	}
-
-	createOutput, err := u.s3Client.CreateMultipartUpload(ctx, createInput)
+	// Use the multipart uploader
+	result, err := u.multipartClient.Upload(ctx, bucket, key, reader, size, config, startTime)
 	if err != nil {
 		return nil, errors.NewError("uploadMultipart", err).WithBucket(bucket).WithKey(key)
-	}
-
-	uploadID := aws.ToString(createOutput.UploadId)
-
-	// For simplicity, upload the entire content as one part
-	// In a full implementation, this would split into multiple parts
-	data, err := io.ReadAll(reader)
-	if err != nil {
-		// Abort the multipart upload
-		u.abortMultipartUpload(ctx, bucket, key, uploadID)
-		return nil, errors.NewError("uploadMultipart", err).WithBucket(bucket).WithKey(key)
-	}
-
-	partInput := &s3.UploadPartInput{
-		Bucket:     aws.String(bucket),
-		Key:        aws.String(key),
-		UploadId:   aws.String(uploadID),
-		PartNumber: aws.Int32(1),
-		Body:       bytes.NewReader(data),
-	}
-
-	partOutput, err := u.s3Client.UploadPart(ctx, partInput)
-	if err != nil {
-		// Abort the multipart upload
-		u.abortMultipartUpload(ctx, bucket, key, uploadID)
-		return nil, errors.NewError("uploadMultipart", err).WithBucket(bucket).WithKey(key)
-	}
-
-	// Complete the multipart upload
-	completeInput := &s3.CompleteMultipartUploadInput{
-		Bucket:   aws.String(bucket),
-		Key:      aws.String(key),
-		UploadId: aws.String(uploadID),
-		MultipartUpload: &awstypes.CompletedMultipartUpload{
-			Parts: []awstypes.CompletedPart{
-				{
-					ETag:       partOutput.ETag,
-					PartNumber: aws.Int32(1),
-				},
-			},
-		},
-	}
-
-	completeOutput, err := u.s3Client.CompleteMultipartUpload(ctx, completeInput)
-	if err != nil {
-		// Abort the multipart upload
-		u.abortMultipartUpload(ctx, bucket, key, uploadID)
-		return nil, errors.NewError("uploadMultipart", err).WithBucket(bucket).WithKey(key)
-	}
-
-	// Create the result
-	result := &s3types.UploadResult{
-		Key:       key,
-		Size:      size,
-		ETag:      aws.ToString(completeOutput.ETag),
-		VersionID: aws.ToString(completeOutput.VersionId),
-		Duration:  time.Since(startTime),
 	}
 
 	// Call progress tracker if provided
@@ -278,15 +190,4 @@ func (u *Uploader) uploadMultipart(
 	}
 
 	return result, nil
-}
-
-// abortMultipartUpload cleans up a failed multipart upload.
-func (u *Uploader) abortMultipartUpload(ctx context.Context, bucket, key, uploadID string) {
-	abortInput := &s3.AbortMultipartUploadInput{
-		Bucket:   aws.String(bucket),
-		Key:      aws.String(key),
-		UploadId: aws.String(uploadID),
-	}
-	// Ignore errors during cleanup
-	_, _ = u.s3Client.AbortMultipartUpload(ctx, abortInput)
 }
