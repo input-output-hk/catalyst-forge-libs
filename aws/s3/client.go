@@ -34,6 +34,9 @@ type Client struct {
 	// config holds the AWS configuration
 	config aws.Config
 
+	// clientConfig holds the client configuration options
+	clientConfig *s3types.ClientConfig
+
 	// mu protects concurrent access to client configuration
 	mu sync.RWMutex
 
@@ -121,10 +124,11 @@ func New(opts ...s3types.Option) (*Client, error) {
 	}
 
 	client := &Client{
-		s3Client:  s3Client,
-		rawClient: s3Client,
-		config:    cfg,
-		fs:        filesystem,
+		s3Client:     s3Client,
+		rawClient:    s3Client,
+		config:       cfg,
+		clientConfig: clientCfg,
+		fs:           filesystem,
 	}
 
 	return client, nil
@@ -136,7 +140,14 @@ func NewWithClient(s3Client s3api.S3API) *Client {
 	return &Client{
 		s3Client: s3Client,
 		config:   aws.Config{},
-		fs:       billy.NewOSFS("/"), // Default to OS filesystem
+		clientConfig: &s3types.ClientConfig{
+			MaxRetries:     3,
+			Timeout:        0,
+			Concurrency:    5,
+			PartSize:       8 * 1024 * 1024,
+			ForcePathStyle: false,
+		},
+		fs: billy.NewOSFS("/"), // Default to OS filesystem
 	}
 }
 
@@ -156,4 +167,26 @@ func (c *Client) Close() error {
 
 	// Future: close any connection pools, cleanup resources
 	return nil
+}
+
+// getClientConfig returns a copy of the client's configuration.
+// This is used internally to access configuration settings.
+func (c *Client) getClientConfig() *s3types.ClientConfig {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.clientConfig == nil {
+		// Fallback for clients created with older constructors
+		return &s3types.ClientConfig{
+			MaxRetries:     3,
+			Timeout:        0,
+			Concurrency:    5,
+			PartSize:       8 * 1024 * 1024,
+			ForcePathStyle: false,
+		}
+	}
+
+	// Return a copy to prevent external modification
+	config := *c.clientConfig
+	return &config
 }

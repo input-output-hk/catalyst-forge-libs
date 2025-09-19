@@ -82,10 +82,15 @@ func (c *Client) Sync(
 
 	pl := planner.NewPlanner(comp)
 
-	// Configure executor with parallelism
+	// Configure executor with parallelism - use client-level concurrency as default
 	parallelism := cfg.Parallelism
 	if parallelism <= 0 {
-		parallelism = 5
+		// Use client-level concurrency setting as default, fallback to 5
+		clientCfg := c.getClientConfig()
+		parallelism = clientCfg.Concurrency
+		if parallelism <= 0 {
+			parallelism = 5
+		}
 	}
 	ex := executor.NewExecutor(c.s3Client, parallelism)
 

@@ -177,8 +177,11 @@ func (u *Uploader) uploadMultipart(
 	config *s3types.UploadConfig,
 	startTime time.Time,
 ) (*s3types.UploadResult, error) {
-	// Use the multipart uploader
-	result, err := u.multipartClient.Upload(ctx, bucket, key, reader, size, config, startTime)
+	// Use the multipart uploader with client concurrency from config
+	clientConcurrency := config.Concurrency // This is already set to client-level default
+	result, err := u.multipartClient.UploadWithClientConcurrency(
+		ctx, bucket, key, reader, size, config, startTime, clientConcurrency,
+	)
 	if err != nil {
 		return nil, errors.NewError("uploadMultipart", err).WithBucket(bucket).WithKey(key)
 	}

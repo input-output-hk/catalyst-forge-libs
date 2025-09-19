@@ -41,6 +41,19 @@ func (u *Uploader) Upload(
 	config *s3types.UploadConfig,
 	startTime time.Time,
 ) (*s3types.UploadResult, error) {
+	return u.UploadWithClientConcurrency(ctx, bucket, key, reader, size, config, startTime, 0)
+}
+
+// UploadWithClientConcurrency performs a multipart upload with explicit client concurrency
+func (u *Uploader) UploadWithClientConcurrency(
+	ctx context.Context,
+	bucket, key string,
+	reader io.Reader,
+	size int64,
+	config *s3types.UploadConfig,
+	startTime time.Time,
+	clientConcurrency int,
+) (*s3types.UploadResult, error) {
 	// Determine part size
 	partSize := u.getPartSize(config.PartSize)
 
@@ -64,6 +77,7 @@ func (u *Uploader) Upload(
 		partSize,
 		numParts,
 		config,
+		clientConcurrency,
 	)
 	if err != nil {
 		// Clean up on failure
@@ -152,6 +166,7 @@ func (u *Uploader) uploadParts(
 	partSize int64,
 	numParts int,
 	config *s3types.UploadConfig,
+	clientConcurrency int,
 ) ([]awstypes.CompletedPart, error) {
 	// Create channels for coordination
 	type partResult struct {
@@ -165,7 +180,7 @@ func (u *Uploader) uploadParts(
 	parts := make([]awstypes.CompletedPart, numParts)
 
 	// Determine concurrency level
-	concurrency := u.getConcurrency(config.Concurrency)
+	concurrency := u.getConcurrency(config.Concurrency, clientConcurrency)
 
 	// Use semaphore to limit concurrent uploads
 	sem := make(chan struct{}, concurrency)
@@ -236,9 +251,12 @@ func (u *Uploader) uploadParts(
 }
 
 // getConcurrency returns the configured concurrency level or default
-func (u *Uploader) getConcurrency(configuredConcurrency int) int {
+func (u *Uploader) getConcurrency(configuredConcurrency, clientConcurrency int) int {
 	if configuredConcurrency > 0 {
 		return configuredConcurrency
+	}
+	if clientConcurrency > 0 {
+		return clientConcurrency
 	}
 	return 5 // Default concurrency
 }

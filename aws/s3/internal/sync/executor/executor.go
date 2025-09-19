@@ -370,6 +370,19 @@ func (e *Executor) ExecuteOperations(
 	startTime := time.Now()
 
 	// Separate operations by type
+	uploads, deletes := e.separateOperations(operations)
+
+	result := &ExecutionResult{}
+
+	// Execute uploads and deletes concurrently
+	err := e.executeOperationsConcurrently(ctx, config, uploads, deletes, result)
+
+	result.Duration = time.Since(startTime)
+	return result, err
+}
+
+// separateOperations separates operations into uploads and deletes.
+func (e *Executor) separateOperations(operations []*planner.Operation) ([]*planner.Operation, []*planner.Operation) {
 	var uploads, deletes []*planner.Operation
 	for _, op := range operations {
 		switch op.Type {
@@ -379,10 +392,16 @@ func (e *Executor) ExecuteOperations(
 			deletes = append(deletes, op)
 		}
 	}
+	return uploads, deletes
+}
 
-	result := &ExecutionResult{}
-
-	// Execute uploads and deletes concurrently
+// executeOperationsConcurrently executes uploads and deletes concurrently.
+func (e *Executor) executeOperationsConcurrently(
+	ctx context.Context,
+	config *SyncConfig,
+	uploads, deletes []*planner.Operation,
+	result *ExecutionResult,
+) error {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var firstError error
@@ -392,17 +411,7 @@ func (e *Executor) ExecuteOperations(
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			uploadResult, err := e.ExecuteUploads(ctx, config, uploads)
-			mu.Lock()
-			defer mu.Unlock()
-
-			if err != nil && firstError == nil {
-				firstError = err
-			}
-
-			if uploadResult != nil {
-				result.UploadResult = *uploadResult
-			}
+			e.executeUploadsAsync(ctx, config, uploads, result, &firstError, &mu)
 		}()
 	}
 
@@ -411,24 +420,70 @@ func (e *Executor) ExecuteOperations(
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			deleteResult, err := e.ExecuteDeletes(ctx, config, deletes)
-			mu.Lock()
-			defer mu.Unlock()
-
-			if err != nil && firstError == nil {
-				firstError = err
-			}
-
-			if deleteResult != nil {
-				result.DeleteResult = *deleteResult
-			}
+			e.executeDeletesAsync(ctx, config, deletes, result, &firstError, &mu)
 		}()
 	}
 
 	wg.Wait()
+	return firstError
+}
 
-	result.Duration = time.Since(startTime)
-	return result, firstError
+// executeUploadsAsync executes uploads asynchronously with proper error handling.
+func (e *Executor) executeUploadsAsync(
+	ctx context.Context,
+	config *SyncConfig,
+	uploads []*planner.Operation,
+	result *ExecutionResult,
+	firstError *error,
+	mu *sync.Mutex,
+) {
+	// Check if context is cancelled before starting
+	select {
+	case <-ctx.Done():
+		return
+	default:
+	}
+
+	uploadResult, err := e.ExecuteUploads(ctx, config, uploads)
+	mu.Lock()
+	defer mu.Unlock()
+
+	if err != nil && *firstError == nil {
+		*firstError = err
+	}
+
+	if uploadResult != nil {
+		result.UploadResult = *uploadResult
+	}
+}
+
+// executeDeletesAsync executes deletes asynchronously with proper error handling.
+func (e *Executor) executeDeletesAsync(
+	ctx context.Context,
+	config *SyncConfig,
+	deletes []*planner.Operation,
+	result *ExecutionResult,
+	firstError *error,
+	mu *sync.Mutex,
+) {
+	// Check if context is cancelled before starting
+	select {
+	case <-ctx.Done():
+		return
+	default:
+	}
+
+	deleteResult, err := e.ExecuteDeletes(ctx, config, deletes)
+	mu.Lock()
+	defer mu.Unlock()
+
+	if err != nil && *firstError == nil {
+		*firstError = err
+	}
+
+	if deleteResult != nil {
+		result.DeleteResult = *deleteResult
+	}
 }
 
 // ExecutionResult contains the combined results of upload and delete operations.

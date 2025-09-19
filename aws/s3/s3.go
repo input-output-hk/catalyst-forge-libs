@@ -60,8 +60,8 @@ func (c *Client) Upload(
 		ContentType:  DefaultContentType, // Default content type
 		StorageClass: s3types.StorageClassStandard,
 		Metadata:     make(map[string]string),
-		PartSize:     8 * 1024 * 1024, // 8MB default
-		Concurrency:  5,
+		PartSize:     8 * 1024 * 1024,                 // 8MB default
+		Concurrency:  c.getClientConfig().Concurrency, // Use client-level concurrency as default
 	}
 	for _, opt := range opts {
 		opt(config)
@@ -149,8 +149,8 @@ func (c *Client) UploadFile(
 		ContentType:  DefaultContentType,
 		StorageClass: s3types.StorageClassStandard,
 		Metadata:     make(map[string]string),
-		PartSize:     8 * 1024 * 1024, // 8MB default
-		Concurrency:  5,
+		PartSize:     8 * 1024 * 1024,                 // 8MB default
+		Concurrency:  c.getClientConfig().Concurrency, // Use client-level concurrency as default
 	}
 	for _, opt := range opts {
 		opt(config)
@@ -223,8 +223,8 @@ func (c *Client) Put(ctx context.Context, bucket, key string, data []byte, opts 
 		ContentType:  DefaultContentType,
 		StorageClass: s3types.StorageClassStandard,
 		Metadata:     make(map[string]string),
-		PartSize:     8 * 1024 * 1024, // 8MB default
-		Concurrency:  5,
+		PartSize:     8 * 1024 * 1024,                 // 8MB default
+		Concurrency:  c.getClientConfig().Concurrency, // Use client-level concurrency as default
 	}
 	for _, opt := range opts {
 		opt(config)
