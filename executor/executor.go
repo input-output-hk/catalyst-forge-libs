@@ -1,8 +1,12 @@
+// Package executor provides a flexible and powerful way to execute external commands
+// with features like retry logic, output capture, environment variable management,
+// and context support for proper cancellation and timeouts.
 package executor
 
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -101,7 +105,7 @@ type WrappedExecutor struct {
 }
 
 // Command creates a new executor for the wrapped program with specific arguments
-func (w *WrappedExecutor) Command(args ...string) Executor {
+func (w *WrappedExecutor) Command(args ...string) *CommandExecutor {
 	return &CommandExecutor{
 		program: w.program,
 		args:    args,
@@ -110,13 +114,25 @@ func (w *WrappedExecutor) Command(args ...string) Executor {
 }
 
 // Execute runs the command with the wrapped program
-func (w *WrappedExecutor) Execute(ctx context.Context, args []string, opts ...Option) (*Result, error) {
-	return w.Command(args...).Execute(ctx, opts...)
+func (w *WrappedExecutor) Execute(
+	ctx context.Context,
+	args []string,
+	opts ...Option,
+) (*Result, error) {
+	result, err := w.Command(args...).Execute(ctx, opts...)
+	if err != nil {
+		return result, fmt.Errorf("failed to execute command with args %v: %w", args, err)
+	}
+	return result, nil
 }
 
 // ExecuteSimple is a convenience method for simple command execution
 func (w *WrappedExecutor) ExecuteSimple(args ...string) (*Result, error) {
-	return w.Command(args...).Execute(context.Background())
+	result, err := w.Command(args...).Execute(context.Background())
+	if err != nil {
+		return result, fmt.Errorf("failed to execute simple command with args %v: %w", args, err)
+	}
+	return result, nil
 }
 
 // Execute implements the Executor interface
@@ -125,7 +141,11 @@ func (c *CommandExecutor) Execute(ctx context.Context, opts ...Option) (*Result,
 }
 
 // ExecuteWithInput implements the Executor interface with stdin support
-func (c *CommandExecutor) ExecuteWithInput(ctx context.Context, input string, opts ...Option) (*Result, error) {
+func (c *CommandExecutor) ExecuteWithInput(
+	ctx context.Context,
+	input string,
+	opts ...Option,
+) (*Result, error) {
 	// Apply options
 	options := c.mergeOptions(opts...)
 
@@ -150,7 +170,7 @@ func (c *CommandExecutor) ExecuteWithInput(ctx context.Context, input string, op
 		// Wait before retry
 		select {
 		case <-ctx.Done():
-			return result, ctx.Err()
+			return result, fmt.Errorf("context cancelled during retry: %w", ctx.Err())
 		case <-time.After(options.RetryDelay):
 			// Continue to next attempt
 		}
@@ -159,9 +179,8 @@ func (c *CommandExecutor) ExecuteWithInput(ctx context.Context, input string, op
 	return lastResult, lastResult.Err
 }
 
-func (c *CommandExecutor) executeOnce(ctx context.Context, input string, options *Options) (*Result, error) {
-	cmd := exec.CommandContext(ctx, c.program, c.args...)
-
+// setupCommand configures the exec.Cmd with working directory, environment, and input
+func (c *CommandExecutor) setupCommand(cmd *exec.Cmd, input string, options *Options) {
 	// Set working directory
 	if options.WorkingDir != "" {
 		cmd.Dir = options.WorkingDir
@@ -179,8 +198,13 @@ func (c *CommandExecutor) executeOnce(ctx context.Context, input string, options
 	if input != "" {
 		cmd.Stdin = strings.NewReader(input)
 	}
+}
 
-	// Setup output capture
+// setupOutputCapture configures stdout and stderr writers for the command
+func (c *CommandExecutor) setupOutputCapture(
+	cmd *exec.Cmd,
+	options *Options,
+) (*bytes.Buffer, *bytes.Buffer, *bytes.Buffer) {
 	var stdoutBuf, stderrBuf, combinedBuf bytes.Buffer
 
 	// Configure stdout
@@ -223,10 +247,14 @@ func (c *CommandExecutor) executeOnce(ctx context.Context, input string, options
 		cmd.Stderr = io.MultiWriter(stderrWriters...)
 	}
 
-	// Execute command
-	err := cmd.Run()
+	return &stdoutBuf, &stderrBuf, &combinedBuf
+}
 
-	// Prepare result
+// createResult creates a Result from command execution and error
+func (c *CommandExecutor) createResult(
+	stdoutBuf, stderrBuf, combinedBuf *bytes.Buffer,
+	err error,
+) *Result {
 	result := &Result{
 		Stdout:   stdoutBuf.String(),
 		Stderr:   stderrBuf.String(),
@@ -235,15 +263,39 @@ func (c *CommandExecutor) executeOnce(ctx context.Context, input string, options
 	}
 
 	// Get exit code
-	if exitErr, ok := err.(*exec.ExitError); ok {
+	var exitErr *exec.ExitError
+	switch {
+	case err != nil && errors.As(err, &exitErr):
 		result.ExitCode = exitErr.ExitCode()
-	} else if err == nil {
+	case err == nil:
 		result.ExitCode = 0
-	} else {
+	default:
 		result.ExitCode = -1
 	}
 
-	return result, err
+	return result
+}
+
+func (c *CommandExecutor) executeOnce(
+	ctx context.Context,
+	input string,
+	options *Options,
+) (*Result, error) {
+	cmd := exec.CommandContext(ctx, c.program, c.args...)
+
+	c.setupCommand(cmd, input, options)
+	stdoutBuf, stderrBuf, combinedBuf := c.setupOutputCapture(cmd, options)
+
+	// Execute command
+	err := cmd.Run()
+
+	// Prepare result
+	result := c.createResult(stdoutBuf, stderrBuf, combinedBuf, err)
+
+	if err != nil {
+		return result, fmt.Errorf("command execution failed: %w", err)
+	}
+	return result, nil
 }
 
 func (c *CommandExecutor) mergeOptions(opts ...Option) *Options {

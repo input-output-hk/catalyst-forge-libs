@@ -12,7 +12,7 @@ deps:
 
     RUN curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.3.1
 
-    COPY go.mod go.sum .
+    COPY go.mod .
     RUN go mod download
 
 src:

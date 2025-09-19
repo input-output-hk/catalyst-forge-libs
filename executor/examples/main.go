@@ -1,3 +1,6 @@
+// Package main demonstrates various usage patterns of the executor package.
+// It includes examples of simple command execution, wrapped executors for common tools,
+// retry logic, pipeline operations, and interactive commands with input.
 package main
 
 import (
@@ -99,7 +102,6 @@ func dockerWrapperExample() {
 			return err != nil && strings.Contains(err.Error(), "connection")
 		}),
 	)
-
 	if err != nil {
 		log.Printf("Docker not available or error: %v\n", err)
 		return
@@ -169,7 +171,6 @@ func interactiveExample() {
 		input,
 		executor.SilentMode(),
 	)
-
 	if err != nil {
 		log.Printf("Sed failed: %v\n", err)
 		return
@@ -198,9 +199,8 @@ func (k *KubectlWrapper) GetPods() ([]string, error) {
 		[]string{"get", "pods", "-n", k.namespace, "--no-headers", "-o", "custom-columns=:metadata.name"},
 		executor.SilentMode(),
 	)
-
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get pods in namespace %s: %w", k.namespace, err)
 	}
 
 	pods := strings.Split(strings.TrimSpace(result.Stdout), "\n")
@@ -208,19 +208,27 @@ func (k *KubectlWrapper) GetPods() ([]string, error) {
 }
 
 func (k *KubectlWrapper) DescribePod(podName string) (*executor.Result, error) {
-	return k.executor.Execute(
+	result, err := k.executor.Execute(
 		context.Background(),
 		[]string{"describe", "pod", podName, "-n", k.namespace},
 		executor.CaptureAll(), // Show output and capture it
 	)
+	if err != nil {
+		return result, fmt.Errorf("failed to describe pod %s in namespace %s: %w", podName, k.namespace, err)
+	}
+	return result, nil
 }
 
 func (k *KubectlWrapper) ExecInPod(podName string, command []string) (*executor.Result, error) {
 	args := append([]string{"exec", "-n", k.namespace, podName, "--"}, command...)
 
-	return k.executor.Execute(
+	result, err := k.executor.Execute(
 		context.Background(),
 		args,
 		executor.WithRetry(2, time.Second),
 	)
+	if err != nil {
+		return result, fmt.Errorf("failed to execute command %v in pod %s: %w", command, podName, err)
+	}
+	return result, nil
 }

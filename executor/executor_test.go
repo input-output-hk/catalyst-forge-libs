@@ -29,7 +29,11 @@ func (m *MockExecutor) Execute(ctx context.Context, opts ...executor.Option) (*e
 	}, nil
 }
 
-func (m *MockExecutor) ExecuteWithInput(ctx context.Context, input string, opts ...executor.Option) (*executor.Result, error) {
+func (m *MockExecutor) ExecuteWithInput(
+	ctx context.Context,
+	input string,
+	opts ...executor.Option,
+) (*executor.Result, error) {
 	m.CallCount++
 	if m.ExecuteWithInputFunc != nil {
 		return m.ExecuteWithInputFunc(ctx, input, opts...)
@@ -41,7 +45,6 @@ func TestBasicExecution(t *testing.T) {
 	// Test basic command execution
 	cmd := executor.New("echo", "hello", "world")
 	result, err := cmd.Execute(context.Background())
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -61,7 +64,6 @@ func TestWrappedExecutor(t *testing.T) {
 
 	// Execute git version
 	result, err := git.ExecuteSimple("version")
-
 	if err != nil {
 		t.Skipf("git not available: %v", err)
 	}
@@ -75,7 +77,6 @@ func TestCaptureAndRedirect(t *testing.T) {
 	// Test simultaneous capture and console redirect
 	cmd := executor.New("echo", "test output")
 	result, err := cmd.Execute(context.Background(), executor.CaptureAll())
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -92,7 +93,6 @@ func TestCombinedOutput(t *testing.T) {
 		context.Background(),
 		executor.WithCapture(false, false, true),
 	)
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -158,7 +158,6 @@ func TestWithInput(t *testing.T) {
 		input,
 		executor.SilentMode(),
 	)
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -175,7 +174,6 @@ func TestWorkingDirectory(t *testing.T) {
 		context.Background(),
 		executor.WithWorkingDir("/tmp"),
 	)
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -192,7 +190,6 @@ func TestEnvironmentVariables(t *testing.T) {
 		context.Background(),
 		executor.WithEnvVar("CUSTOM_VAR", "test_value"),
 	)
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -264,7 +261,6 @@ func ExampleCommandExecutor_Execute_withRetry() {
 			return err != nil
 		}),
 	)
-
 	if err != nil {
 		fmt.Printf("Failed after retries: %v\n", err)
 		return
@@ -280,7 +276,6 @@ func ExampleCommandExecutor_Execute_captureAndDisplay() {
 		context.Background(),
 		executor.CaptureAll(), // Captures AND displays
 	)
-
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		return
