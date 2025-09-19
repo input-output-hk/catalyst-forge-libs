@@ -1,0 +1,63 @@
+VERSION 0.8
+
+deps:
+    FROM golang:1.24.2-bookworm
+
+    WORKDIR /work
+
+    RUN mkdir -p /go/cache && mkdir -p /go/modcache
+    ENV GOCACHE=/go/cache
+    ENV GOMODCACHE=/go/modcache
+    CACHE --persist --sharing shared /go
+
+    RUN curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.3.1
+
+    COPY go.mod go.sum .
+    RUN go mod download
+
+    # Save Go toolchain and caches as artifacts for use in DIND stages
+    SAVE ARTIFACT /usr/local/go go-root
+    SAVE ARTIFACT /go go-home
+
+src:
+    FROM +deps
+
+    CACHE --persist --sharing shared /go
+
+    COPY . .
+
+    RUN go generate ./...
+
+    SAVE ARTIFACT . src
+
+check:
+    FROM +src
+
+    COPY ../../+golangci-config/config .golangci.yml
+
+    RUN golangci-lint run ./...
+
+test-unit:
+    FROM +src
+
+    RUN go test ./...
+
+test-integration:
+    FROM earthly/dind:ubuntu-24.04-docker-27.3.1-1
+
+    WORKDIR /work
+
+    COPY +deps/go-root /usr/local/go
+    COPY +deps/go-home /go
+
+    ENV PATH="/usr/local/go/bin:${PATH}"
+    ENV GOCACHE=/go/cache
+    ENV GOMODCACHE=/go/modcache
+
+    # Bring in project source from src stage
+    COPY +src/src .
+
+    WITH DOCKER
+        RUN go test -tags=integration -v ./...
+    END
+
