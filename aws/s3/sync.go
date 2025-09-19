@@ -25,13 +25,33 @@ import (
 // 2. Planning: Determine what operations are needed
 // 3. Execution: Perform the operations with concurrency control
 //
+// By default, sync only uploads new or modified files. Use WithSyncDeleteExtra
+// to remove files from S3 that don't exist locally.
+//
+// Returns:
+//   - *SyncResult: Contains statistics about the sync operation
+//   - error: Returns an error if the sync fails
+//
+// Errors:
+//   - ErrInvalidInput: If localPath or bucket is empty
+//   - ErrAccessDenied: If credentials lack required permissions
+//   - ErrBucketNotFound: If the specified bucket doesn't exist
+//   - File system errors for local path access
+//   - Network errors or AWS SDK errors wrapped in Error type
+//
 // Example:
 //
 //	result, err := client.Sync(ctx, "/local/path", "my-bucket", "prefix/",
 //	    s3.WithSyncDryRun(true),
 //	    s3.WithSyncIncludePattern("*.txt"),
 //	    s3.WithSyncExcludePattern("*.tmp"),
+//	    s3.WithSyncProgressTracker(tracker),
 //	)
+//	if err != nil {
+//	    return fmt.Errorf("sync failed: %w", err)
+//	}
+//	fmt.Printf("Uploaded %d files (%d bytes)\n", result.FilesUploaded, result.BytesUploaded)
+//	fmt.Printf("Skipped %d unchanged files\n", result.FilesSkipped)
 func (c *Client) Sync(
 	ctx context.Context,
 	localPath, bucket, prefix string,
@@ -136,11 +156,21 @@ func (c *Client) Sync(
 // This is a convenience method that downloads new and updated files from S3
 // without uploading local changes.
 //
-// Example:
+// NOTE: This method is not yet implemented and will return an error.
+// Use the AWS CLI or implement custom download logic for now.
+//
+// Returns:
+//   - *SyncResult: Would contain download statistics when implemented
+//   - error: Currently always returns ErrNotImplemented
+//
+// Example (when implemented):
 //
 //	result, err := client.SyncDownload(ctx, "my-bucket", "prefix/", "/local/path",
 //	    s3.WithSyncProgressTracker(tracker),
 //	)
+//	if err != nil {
+//	    return fmt.Errorf("download sync failed: %w", err)
+//	}
 func (c *Client) SyncDownload(
 	ctx context.Context,
 	bucket, prefix, localPath string,
@@ -154,11 +184,26 @@ func (c *Client) SyncDownload(
 // SyncUpload synchronizes from local filesystem to S3 (upload only).
 // This is equivalent to Sync without the DeleteExtra option.
 //
+// This method only uploads new or modified files to S3.
+// It never deletes files from S3, even if they don't exist locally.
+//
+// Returns:
+//   - *SyncResult: Contains statistics about uploaded files
+//   - error: Returns an error if the sync fails
+//
+// Errors:
+//   - Same as Sync method
+//
 // Example:
 //
 //	result, err := client.SyncUpload(ctx, "/local/path", "my-bucket", "prefix/",
 //	    s3.WithSyncProgressTracker(tracker),
+//	    s3.WithSyncIncludePattern("*.jpg"),
 //	)
+//	if err != nil {
+//	    return fmt.Errorf("upload sync failed: %w", err)
+//	}
+//	fmt.Printf("Uploaded %d files\n", result.FilesUploaded)
 func (c *Client) SyncUpload(
 	ctx context.Context,
 	localPath, bucket, prefix string,

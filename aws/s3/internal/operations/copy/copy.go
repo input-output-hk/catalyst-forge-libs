@@ -113,9 +113,12 @@ func (c *Copier) applyCopyOptions(input *s3.CopyObjectInput, config *s3types.Cop
 
 	c.applySSEOptionsToCopy(input, config.SSE)
 
+	// Set ACL - default to private for security
+	acl := s3types.ACLPrivate
 	if config.ACL != "" {
-		input.ACL = awstypes.ObjectCannedACL(config.ACL)
+		acl = config.ACL
 	}
+	input.ACL = awstypes.ObjectCannedACL(acl)
 }
 
 // applySSEOptionsToCopy applies server-side encryption options to CopyObjectInput
@@ -269,9 +272,12 @@ func (c *Copier) applyMultipartUploadOptions(input *s3.CreateMultipartUploadInpu
 
 	c.applySSEOptionsToMultipart(input, config.SSE)
 
+	// Set ACL - default to private for security
+	acl := s3types.ACLPrivate
 	if config.ACL != "" {
-		input.ACL = awstypes.ObjectCannedACL(config.ACL)
+		acl = config.ACL
 	}
+	input.ACL = awstypes.ObjectCannedACL(acl)
 
 	if config.Metadata != nil {
 		input.Metadata = config.Metadata

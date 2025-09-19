@@ -90,7 +90,7 @@ func TestUploader_Upload_Simple(t *testing.T) {
 			config: &s3types.UploadConfig{
 				ContentType: "text/plain",
 				SSE: &s3types.SSEConfig{
-					Type: "AES256", // Use string literal for now
+					Type: s3types.SSES3,
 				},
 			},
 			mockFunc: func(m *testutil.MockS3Client) {
@@ -98,6 +98,44 @@ func TestUploader_Upload_Simple(t *testing.T) {
 					assert.Equal(t, awstypes.ServerSideEncryptionAes256, input.ServerSideEncryption)
 					return &s3.PutObjectOutput{
 						ETag: aws.String("test-etag"),
+					}, nil
+				}
+			},
+			wantErr: false,
+		},
+		{
+			name:    "upload with ACL",
+			content: "acl content",
+			bucket:  "test-bucket",
+			key:     "test-key",
+			config: &s3types.UploadConfig{
+				ContentType: "text/plain",
+				ACL:         s3types.ACLPublicRead,
+			},
+			mockFunc: func(m *testutil.MockS3Client) {
+				m.PutObjectFunc = func(ctx context.Context, input *s3.PutObjectInput, opts ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
+					assert.Equal(t, awstypes.ObjectCannedACL("public-read"), input.ACL)
+					return &s3.PutObjectOutput{
+						ETag: aws.String("acl-etag"),
+					}, nil
+				}
+			},
+			wantErr: false,
+		},
+		{
+			name:    "upload with default private ACL",
+			content: "private content",
+			bucket:  "test-bucket",
+			key:     "test-key",
+			config: &s3types.UploadConfig{
+				ContentType: "text/plain",
+			},
+			mockFunc: func(m *testutil.MockS3Client) {
+				m.PutObjectFunc = func(ctx context.Context, input *s3.PutObjectInput, opts ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
+					// Should default to private ACL
+					assert.Equal(t, awstypes.ObjectCannedACL("private"), input.ACL)
+					return &s3.PutObjectOutput{
+						ETag: aws.String("private-etag"),
 					}, nil
 				}
 			},
@@ -375,7 +413,7 @@ func TestUploader_UploadSimple(t *testing.T) {
 			config: &s3types.UploadConfig{
 				ContentType: "text/plain",
 				SSE: &s3types.SSEConfig{
-					Type:     "aws:kms",
+					Type:     s3types.SSEKMS,
 					KMSKeyID: "my-kms-key",
 				},
 			},

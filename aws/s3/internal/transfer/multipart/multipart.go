@@ -148,6 +148,13 @@ func (u *Uploader) createMultipartUpload(
 		}
 	}
 
+	// Set ACL - default to private for security
+	acl := s3types.ACLPrivate
+	if config.ACL != "" {
+		acl = config.ACL
+	}
+	input.ACL = awstypes.ObjectCannedACL(acl)
+
 	output, err := u.s3Client.CreateMultipartUpload(ctx, input)
 	if err != nil {
 		return "", errors.NewError("createMultipartUpload", err).WithBucket(bucket).WithKey(key)

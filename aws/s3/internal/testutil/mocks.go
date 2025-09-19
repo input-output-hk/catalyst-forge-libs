@@ -6,6 +6,8 @@ import (
 	"context"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+
+	"github.com/input-output-hk/catalyst-forge-libs/aws/s3/internal/s3api"
 )
 
 // MockS3Client is a mock implementation of the S3API interface for testing.
@@ -194,3 +196,6 @@ func (m *MockS3Client) DeleteBucket(
 	}
 	return &s3.DeleteBucketOutput{}, nil
 }
+
+// Ensure MockS3Client implements s3api.S3API interface
+var _ s3api.S3API = (*MockS3Client)(nil)

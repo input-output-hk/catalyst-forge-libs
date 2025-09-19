@@ -127,9 +127,9 @@ func (u *Uploader) uploadSimple(
 	// Set SSE if configured
 	if config.SSE != nil {
 		switch config.SSE.Type {
-		case "AES256":
+		case s3types.SSES3:
 			input.ServerSideEncryption = awstypes.ServerSideEncryptionAes256
-		case "aws:kms":
+		case s3types.SSEKMS:
 			input.ServerSideEncryption = awstypes.ServerSideEncryptionAwsKms
 			if config.SSE.KMSKeyID != "" {
 				input.SSEKMSKeyId = aws.String(config.SSE.KMSKeyID)
@@ -143,6 +143,13 @@ func (u *Uploader) uploadSimple(
 			}
 		}
 	}
+
+	// Set ACL - default to private for security
+	acl := s3types.ACLPrivate
+	if config.ACL != "" {
+		acl = config.ACL
+	}
+	input.ACL = awstypes.ObjectCannedACL(acl)
 
 	// Perform the upload
 	output, err := u.s3Client.PutObject(ctx, input)

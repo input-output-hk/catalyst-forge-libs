@@ -165,6 +165,14 @@ func WithServerSideEncryption(sse *s3types.SSEConfig) s3types.UploadOption {
 	}
 }
 
+// WithACL sets the access control list for upload operations.
+// Defaults to private if not specified.
+func WithACL(acl s3types.ObjectACL) s3types.UploadOption {
+	return func(c *s3types.UploadOptionConfig) {
+		c.ACL = acl
+	}
+}
+
 // WithProgress sets a progress tracker for upload operations.
 func WithProgress(tracker s3types.ProgressTracker) s3types.UploadOption {
 	return func(c *s3types.UploadOptionConfig) {
