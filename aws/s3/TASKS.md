@@ -281,7 +281,7 @@ This implementation follows the architecture defined in [ARCHITECTURE.md](./ARCH
     - Internal packages not importable externally
 
 ### 4.2 Change Detection
-- [ ] **Implement file comparators** [ARCHITECTURE.md § 4.3]
+- [x] **Implement file comparators** [ARCHITECTURE.md § 4.3]
   - Implement FileComparator interface
   - Create SmartComparator (default)
   - Create SizeOnlyComparator
@@ -293,7 +293,7 @@ This implementation follows the architecture defined in [ARCHITECTURE.md](./ARCH
     - Unit tests for each comparator
 
 ### 4.3 Sync Algorithm
-- [ ] **Implement sync orchestration** [ARCHITECTURE.md § 4.2]
+- [x] **Implement sync orchestration** [ARCHITECTURE.md § 4.2]
   - Implement inventory building (Phase 1)
   - Implement change detection (Phase 2)
   - Implement parallel execution (Phase 3)
@@ -305,7 +305,7 @@ This implementation follows the architecture defined in [ARCHITECTURE.md](./ARCH
     - Integration test syncs real directory
 
 ### 4.4 Sync API
-- [ ] **Implement public sync API** [ARCHITECTURE.md § 4.1]
+- [x] **Implement public sync API** [ARCHITECTURE.md § 4.1]
   - Implement Sync() method on Client
   - Create SyncOption functions
   - Implement SyncResult reporting

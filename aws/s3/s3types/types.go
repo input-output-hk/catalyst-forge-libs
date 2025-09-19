@@ -131,7 +131,7 @@ type ProgressTracker interface {
 // Different implementations can use various comparison strategies.
 type FileComparator interface {
 	// HasChanged determines if the local and remote files are different
-	HasChanged(local *LocalFile, remote *RemoteFile) bool
+	HasChanged(local *LocalFile, remote *RemoteFile) (bool, error)
 }
 
 // LocalFile represents a file on the local filesystem during sync operations.

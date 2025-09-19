@@ -161,3 +161,12 @@ func IsAccessDenied(err error) bool {
 func IsInvalidInput(err error) bool {
 	return errors.Is(err, ErrInvalidInput)
 }
+
+// NewValidationError creates a new error for validation failures.
+// This is used when input parameters fail validation before making AWS API calls.
+func NewValidationError(message string) *Error {
+	return &Error{
+		Op:  "validation",
+		Err: fmt.Errorf("%s: %w", message, ErrInvalidInput),
+	}
+}

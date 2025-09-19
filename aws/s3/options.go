@@ -251,3 +251,67 @@ func WithBucketRegion(region string) s3types.BucketOption {
 		c.Region = region
 	}
 }
+
+// Sync Options
+
+// WithSyncDryRun enables dry-run mode for sync operations.
+// When enabled, the sync will only report what operations would be performed
+// without actually executing them.
+func WithSyncDryRun(dryRun bool) s3types.SyncOption {
+	return func(c *s3types.SyncOptionConfig) {
+		c.DryRun = dryRun
+	}
+}
+
+// WithSyncDeleteExtra enables deletion of extra files in the destination.
+// When enabled, files that exist in the destination but not in the source
+// will be deleted.
+func WithSyncDeleteExtra(deleteExtra bool) s3types.SyncOption {
+	return func(c *s3types.SyncOptionConfig) {
+		c.DeleteExtra = deleteExtra
+	}
+}
+
+// WithSyncIncludePattern adds an include pattern for sync operations.
+// Only files matching one of the include patterns will be synced.
+// Patterns use glob syntax (e.g., "*.txt", "**/*.go").
+func WithSyncIncludePattern(pattern string) s3types.SyncOption {
+	return func(c *s3types.SyncOptionConfig) {
+		c.IncludePatterns = append(c.IncludePatterns, pattern)
+	}
+}
+
+// WithSyncExcludePattern adds an exclude pattern for sync operations.
+// Files matching any exclude pattern will be skipped.
+// Patterns use glob syntax (e.g., "*.tmp", "**/node_modules/**").
+func WithSyncExcludePattern(pattern string) s3types.SyncOption {
+	return func(c *s3types.SyncOptionConfig) {
+		c.ExcludePatterns = append(c.ExcludePatterns, pattern)
+	}
+}
+
+// WithSyncProgressTracker sets a progress tracker for sync operations.
+// The tracker will receive updates about the sync progress.
+func WithSyncProgressTracker(tracker s3types.ProgressTracker) s3types.SyncOption {
+	return func(c *s3types.SyncOptionConfig) {
+		c.ProgressTracker = tracker
+	}
+}
+
+// WithSyncParallelism sets the number of parallel operations for sync.
+// This controls how many upload/download operations can run concurrently.
+// Default is 5 if not specified.
+func WithSyncParallelism(parallelism int) s3types.SyncOption {
+	return func(c *s3types.SyncOptionConfig) {
+		c.Parallelism = parallelism
+	}
+}
+
+// WithSyncComparator sets a custom file comparator for sync operations.
+// This allows customization of how files are compared to determine if they need syncing.
+// If not specified, SmartComparator is used by default.
+func WithSyncComparator(comparator s3types.FileComparator) s3types.SyncOption {
+	return func(c *s3types.SyncOptionConfig) {
+		c.Comparator = comparator
+	}
+}
