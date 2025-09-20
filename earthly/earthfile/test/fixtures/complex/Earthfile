@@ -1,0 +1,13 @@
+VERSION 0.8
+
+deps:
+	RUN echo deps
+
+compute:
+	RUN echo compute
+
+artifactcopy:
+	BUILD +deps
+	COPY --from=+deps /src /dst
+
+

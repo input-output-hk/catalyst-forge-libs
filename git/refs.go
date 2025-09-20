@@ -34,6 +34,8 @@ const (
 	RefOther
 )
 
+const gitHead = "HEAD"
+
 // String returns a human-readable string representation of the RefKind.
 func (k RefKind) String() string {
 	switch k {
@@ -259,8 +261,8 @@ func (r *Repo) classifyResolvedRevision(rev string, hash *plumbing.Hash) (RefKin
 	}
 
 	// Check if it's HEAD - HEAD always points to a commit
-	if rev == "HEAD" {
-		return RefCommit, "HEAD"
+	if rev == gitHead {
+		return RefCommit, gitHead
 	}
 
 	// Try to find a reference with this name
