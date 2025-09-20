@@ -1,5 +1,7 @@
 package earthfile
 
+import "github.com/earthly/earthly/ast/spec"
+
 // Earthfile represents a parsed Earthfile with indexed access to targets and functions.
 type Earthfile struct {
 	// Pre-computed maps for O(1) lookups
@@ -14,7 +16,7 @@ type Earthfile struct {
 	baseCommands []*Command
 
 	// Original AST for advanced operations
-	ast interface{} // Will be *spec.Earthfile when we have proper imports
+	ast *spec.Earthfile
 }
 
 // BaseCommands returns the commands that appear before any target.
@@ -23,7 +25,7 @@ func (ef *Earthfile) BaseCommands() []*Command {
 }
 
 // AST returns the underlying AST for advanced operations.
-func (ef *Earthfile) AST() interface{} {
+func (ef *Earthfile) AST() *spec.Earthfile {
 	return ef.ast
 }
 

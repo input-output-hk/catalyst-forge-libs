@@ -13,54 +13,54 @@ This implementation SHALL conform to:
 ### Phase 1: Foundation Setup
 
 #### Task 1: Module Structure and Dependencies
-- [ ] Create module directory structure (`earthfile/`)
-- [ ] Initialize go.mod with required dependencies
-- [ ] Add github.com/EarthBuild/earthbuild/ast dependency
-- [ ] Create internal package directories
-- [ ] Run `golangci-lint run` and ensure it passes
+- [x] Create module directory structure (`earthfile/`)
+- [x] Initialize go.mod with required dependencies
+- [x] Add github.com/EarthBuild/earthbuild/ast dependency
+- [x] Create internal package directories
+- [x] Run `golangci-lint run` and ensure it passes
 **Success Criteria**: Module compiles, dependencies resolve, linting passes
 
 #### Task 2: Core Type Definitions
-- [ ] Write failing tests for core types (TestEarthfileStruct, TestTargetStruct, etc.)
-- [ ] Define Earthfile struct with maps for targets/functions
-- [ ] Define Target struct with name, docs, commands
-- [ ] Define Function struct
-- [ ] Define Command struct with type, args, location
-- [ ] Define CommandType enumeration
-- [ ] Define SourceLocation struct
-- [ ] Run tests (should pass) and `golangci-lint run`
+- [x] Write failing tests for core types (TestEarthfileStruct, TestTargetStruct, etc.)
+- [x] Define Earthfile struct with maps for targets/functions
+- [x] Define Target struct with name, docs, commands
+- [x] Define Function struct
+- [x] Define Command struct with type, args, location
+- [x] Define CommandType enumeration
+- [x] Define SourceLocation struct
+- [x] Run tests (should pass) and `golangci-lint run`
 **Success Criteria**: All core types defined, tests pass, no lint errors
 
 ### Phase 2: Parser Implementation
 
 #### Task 3: Basic Parser Functions
-- [ ] Write failing tests for Parse, ParseString, ParseReader functions
-- [ ] Implement Parse(path) function wrapping ast.Parse
-- [ ] Implement ParseString(content) using NamedReader
-- [ ] Implement ParseReader(reader, name)
-- [ ] Implement ParseContext(ctx, path) for cancellation support
-- [ ] Handle error wrapping with fmt.Errorf and %w verb
-- [ ] Run tests and `golangci-lint run`
+- [x] Write failing tests for Parse, ParseString, ParseReader functions
+- [x] Implement Parse(path) function wrapping ast.Parse
+- [x] Implement ParseString(content) using NamedReader
+- [x] Implement ParseReader(reader, name)
+- [x] Implement ParseContext(ctx, path) for cancellation support
+- [x] Handle error wrapping with fmt.Errorf and %w verb
+- [x] Run tests and `golangci-lint run`
 **Success Criteria**: All parser entry points work, proper error handling with stdlib, tests pass
 
 #### Task 4: ParseOptions Support
-- [ ] Write failing tests for ParseWithOptions
-- [ ] Define ParseOptions struct (EnableSourceMap, StrictMode)
-- [ ] Implement ParseWithOptions(path, opts)
-- [ ] Implement option propagation to AST parser
-- [ ] Test source map enable/disable scenarios
-- [ ] Run `golangci-lint run`
+- [x] Write failing tests for ParseWithOptions
+- [x] Define ParseOptions struct (EnableSourceMap, StrictMode)
+- [x] Implement ParseWithOptions(path, opts)
+- [x] Implement option propagation to AST parser
+- [x] Test source map enable/disable scenarios
+- [x] Run `golangci-lint run`
 **Success Criteria**: Options correctly passed to AST parser, tests pass
 
 #### Task 5: AST to Domain Model Conversion
-- [ ] Write failing tests for AST conversion
-- [ ] Implement conversion from spec.Earthfile to domain Earthfile
-- [ ] Build target map during conversion for O(1) lookups
-- [ ] Build function map during conversion
-- [ ] Convert spec.Block to Command slices
-- [ ] Handle nested statements (IF, FOR, WITH, etc.)
-- [ ] Preserve source locations when enabled
-- [ ] Run tests and `golangci-lint run`
+- [x] Write failing tests for AST conversion
+- [x] Implement conversion from spec.Earthfile to domain Earthfile
+- [x] Build target map during conversion for O(1) lookups
+- [x] Build function map during conversion
+- [x] Convert spec.Block to Command slices
+- [x] Handle nested statements (IF, FOR, WITH, etc.)
+- [x] Preserve source locations when enabled
+- [x] Run tests and `golangci-lint run`
 **Success Criteria**: Complete AST transformation, indices built, tests pass
 
 ### Phase 3: Query Interface
