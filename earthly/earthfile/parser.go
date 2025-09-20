@@ -214,6 +214,7 @@ func convertASTToDomain(astEf *spec.Earthfile, opts *ParseOptions) (*Earthfile, 
 		target := &Target{
 			Name:     astTarget.Name,
 			Commands: convertBlock(astTarget.Recipe, opts.EnableSourceMap),
+			recipe:   astTarget.Recipe,
 		}
 		ef.targets[astTarget.Name] = target
 	}
@@ -223,6 +224,7 @@ func convertASTToDomain(astEf *spec.Earthfile, opts *ParseOptions) (*Earthfile, 
 		function := &Function{
 			Name:     astUserCmd.Name,
 			Commands: convertBlock(astUserCmd.Recipe, opts.EnableSourceMap),
+			recipe:   astUserCmd.Recipe,
 		}
 		ef.functions[astUserCmd.Name] = function
 	}

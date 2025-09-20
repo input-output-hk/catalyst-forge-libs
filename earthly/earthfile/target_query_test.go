@@ -252,7 +252,7 @@ func TestTarget_Walk(t *testing.T) {
 	var visited []*Command
 	var depths []int
 
-	err := target.Walk(func(cmd *Command, depth int) error {
+	err := target.WalkCommands(func(cmd *Command, depth int) error {
 		visited = append(visited, cmd)
 		depths = append(depths, depth)
 		return nil
@@ -289,7 +289,7 @@ func TestTarget_Walk_EarlyTermination(t *testing.T) {
 	var visited []*Command
 	stopErr := errStopWalk
 
-	err := target.Walk(func(cmd *Command, depth int) error {
+	err := target.WalkCommands(func(cmd *Command, depth int) error {
 		visited = append(visited, cmd)
 		if cmd.Type == CommandTypeRun {
 			return stopErr

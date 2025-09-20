@@ -66,32 +66,32 @@ This implementation SHALL conform to:
 ### Phase 3: Query Interface
 
 #### Task 6: Earthfile Methods - Basic Access
-- [ ] Write failing tests for Version(), HasVersion()
-- [ ] Write failing tests for Target(), Targets(), TargetNames(), HasTarget()
-- [ ] Write failing tests for Function(), Functions()
-- [ ] Write failing tests for BaseCommands()
-- [ ] Implement all accessor methods
-- [ ] Ensure O(1) lookups using pre-built maps
-- [ ] Run tests and `golangci-lint run`
+- [x] Write failing tests for Version(), HasVersion()
+- [x] Write failing tests for Target(), Targets(), TargetNames(), HasTarget()
+- [x] Write failing tests for Function(), Functions()
+- [x] Write failing tests for BaseCommands()
+- [x] Implement all accessor methods
+- [x] Ensure O(1) lookups using pre-built maps
+- [x] Run tests and `golangci-lint run`
 **Success Criteria**: All query methods work with O(1) performance where applicable
 
 #### Task 7: Target Query Methods
-- [ ] Write failing tests for FindCommands(CommandType)
-- [ ] Write failing tests for GetFromBase(), GetArgs(), GetBuilds()
-- [ ] Write failing tests for GetArtifacts(), GetImages()
-- [ ] Write failing tests for HasCommand(CommandType)
-- [ ] Implement command filtering by type
-- [ ] Cache command type lookups for performance
-- [ ] Run tests and `golangci-lint run`
+- [x] Write failing tests for FindCommands(CommandType)
+- [x] Write failing tests for GetFromBase(), GetArgs(), GetBuilds()
+- [x] Write failing tests for GetArtifacts(), GetImages()
+- [x] Write failing tests for HasCommand(CommandType)
+- [x] Implement command filtering by type
+- [x] Cache command type lookups for performance
+- [x] Run tests and `golangci-lint run`
 **Success Criteria**: Target queries work correctly, command filtering accurate
 
 #### Task 8: Command Analysis Methods
-- [ ] Write failing tests for GetFlag(name), GetPositionalArgs()
-- [ ] Write failing tests for IsRemoteReference(), GetReference()
-- [ ] Implement argument parsing logic
-- [ ] Implement reference detection (local vs remote)
-- [ ] Define Reference struct if needed
-- [ ] Run tests and `golangci-lint run`
+- [x] Write failing tests for GetFlag(name), GetPositionalArgs()
+- [x] Write failing tests for IsRemoteReference(), GetReference()
+- [x] Implement argument parsing logic
+- [x] Implement reference detection (local vs remote)
+- [x] Define Reference struct if needed
+- [x] Run tests and `golangci-lint run`
 **Success Criteria**: Command arguments parsed correctly, references identified
 
 ### Phase 4: Traversal System

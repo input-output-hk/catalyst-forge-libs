@@ -39,12 +39,14 @@ type Target struct {
 	Name     string     // Target name (e.g., "build", "test")
 	Docs     string     // Documentation/comments before target
 	Commands []*Command // List of commands in this target
+	recipe   spec.Block // Raw AST recipe for traversal (internal use)
 }
 
 // Function represents a user-defined function with reusable commands.
 type Function struct {
 	Name     string     // Function name
 	Commands []*Command // List of commands in this function
+	recipe   spec.Block // Raw AST recipe for traversal (internal use)
 }
 
 // Command represents an individual instruction with type, arguments, and position.

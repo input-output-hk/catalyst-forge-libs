@@ -54,9 +54,9 @@ func (t *Target) HasCommand(cmdType CommandType) bool {
 // WalkFunc represents a function to be called for each command during traversal.
 type WalkFunc func(*Command, int) error
 
-// Walk traverses all commands in the target, calling fn for each.
+// WalkCommands traverses all commands in the target, calling fn for each.
 // If fn returns an error, traversal stops and the error is returned.
-func (t *Target) Walk(fn WalkFunc) error {
+func (t *Target) WalkCommands(fn WalkFunc) error {
 	return t.walkCommands(t.Commands, 0, fn)
 }
 
@@ -68,4 +68,23 @@ func (t *Target) walkCommands(commands []*Command, depth int, fn WalkFunc) error
 		}
 	}
 	return nil
+}
+
+// Walk traverses the target's AST with the given visitor.
+// The visitor methods are called for each node in the target's recipe.
+//
+//nolint:wrapcheck // Visitor errors should be returned as-is
+func (t *Target) Walk(v Visitor) error {
+	if t.recipe == nil {
+		// Fallback to just visiting the flattened commands if no AST
+		for _, cmd := range t.Commands {
+			if err := v.VisitCommand(cmd); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Walk the raw AST recipe
+	return walkBlock(t.recipe, v, false)
 }
