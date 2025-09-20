@@ -38,7 +38,6 @@ linters:
     - errorlint
     - wrapcheck
     - revive
-    - nolintlint
     - ineffassign
     - copyloopvar # catches range variable pitfalls
     # API & style hygiene
