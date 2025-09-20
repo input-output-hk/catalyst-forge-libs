@@ -194,6 +194,18 @@ func convertASTToDomain(astEf *spec.Earthfile, opts *ParseOptions) (*Earthfile, 
 		ef.targets[astTarget.Name] = target
 	}
 
+	// Build command type indices for fast lookups
+	for _, t := range ef.targets {
+		if len(t.Commands) == 0 {
+			continue
+		}
+		idx := make(map[CommandType][]*Command, 16)
+		for _, c := range t.Commands {
+			idx[c.Type] = append(idx[c.Type], c)
+		}
+		t.commandsByType = idx
+	}
+
 	// Convert user-defined commands (functions)
 	for _, astUserCmd := range astEf.Functions {
 		function := &Function{
@@ -216,7 +228,8 @@ func convertASTToDomain(astEf *spec.Earthfile, opts *ParseOptions) (*Earthfile, 
 
 // convertBlock converts a spec.Block to a slice of Commands
 func convertBlock(block spec.Block, enableSourceMap bool) []*Command {
-	var commands []*Command
+	// Pre-size slice to reduce reallocations; heuristic: 1 stmt -> up to ~2 commands due to control structures
+	commands := make([]*Command, 0, len(block)*2)
 
 	for _, stmt := range block {
 		cmds := convertStatement(stmt, enableSourceMap)
@@ -230,7 +243,7 @@ func convertBlock(block spec.Block, enableSourceMap bool) []*Command {
 //
 //nolint:cyclop // High complexity is inherent to AST statement type dispatch
 func convertStatement(stmt spec.Statement, enableSourceMap bool) []*Command {
-	var commands []*Command
+	commands := make([]*Command, 0, 4)
 
 	// Handle regular command
 	if stmt.Command != nil {
@@ -244,7 +257,7 @@ func convertStatement(stmt spec.Statement, enableSourceMap bool) []*Command {
 	if stmt.With != nil {
 		// Add the WITH command itself
 		withCmd := &Command{
-			Name: "WITH",
+			Name: internCommandName("WITH"),
 			Type: CommandTypeWith,
 			Args: []string{},
 		}
@@ -262,7 +275,7 @@ func convertStatement(stmt spec.Statement, enableSourceMap bool) []*Command {
 	if stmt.If != nil {
 		// Create an IF command
 		cmd := &Command{
-			Name: "IF",
+			Name: internCommandName("IF"),
 			Type: CommandTypeIf,
 			Args: stmt.If.Expression,
 		}
@@ -278,7 +291,7 @@ func convertStatement(stmt spec.Statement, enableSourceMap bool) []*Command {
 		// Process ELSE IF branches
 		for _, elseIf := range stmt.If.ElseIf {
 			elseIfCmd := &Command{
-				Name: "ELSE IF",
+				Name: internCommandName("ELSE IF"),
 				Type: CommandTypeIf,
 				Args: elseIf.Expression,
 			}
@@ -294,7 +307,7 @@ func convertStatement(stmt spec.Statement, enableSourceMap bool) []*Command {
 		// Process ELSE body
 		if stmt.If.ElseBody != nil {
 			elseCmd := &Command{
-				Name: "ELSE",
+				Name: internCommandName("ELSE"),
 				Type: CommandTypeIf,
 				Args: []string{},
 			}
@@ -308,7 +321,7 @@ func convertStatement(stmt spec.Statement, enableSourceMap bool) []*Command {
 	// Handle FOR statement
 	if stmt.For != nil {
 		cmd := &Command{
-			Name: "FOR",
+			Name: internCommandName("FOR"),
 			Type: CommandTypeFor,
 			Args: stmt.For.Args,
 		}
@@ -330,7 +343,7 @@ func convertStatement(stmt spec.Statement, enableSourceMap bool) []*Command {
 
 		// Add END command for WAIT
 		cmd := &Command{
-			Name: "END",
+			Name: internCommandName("END"),
 			Type: CommandTypeWait,
 			Args: []string{},
 		}
@@ -350,7 +363,7 @@ func convertCommand(specCmd *spec.Command, enableSourceMap bool) *Command {
 	}
 
 	cmd := &Command{
-		Name: specCmd.Name,
+		Name: internCommandName(specCmd.Name),
 		Args: specCmd.Args,
 		Type: getCommandType(specCmd.Name),
 	}

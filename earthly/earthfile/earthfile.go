@@ -273,7 +273,7 @@ func walkCommandsInStatement(stmt spec.Statement, depth int, fn WalkFunc) error 
 	if stmt.If != nil {
 		// Visit the IF command itself
 		ifCmd := &Command{
-			Name: "IF",
+			Name: internCommandName("IF"),
 			Type: CommandTypeIf,
 			Args: stmt.If.Expression,
 		}
@@ -289,7 +289,7 @@ func walkCommandsInStatement(stmt spec.Statement, depth int, fn WalkFunc) error 
 		// Walk ELSE IF branches
 		for _, elseIf := range stmt.If.ElseIf {
 			elseIfCmd := &Command{
-				Name: "ELSE IF",
+				Name: internCommandName("ELSE IF"),
 				Type: CommandTypeIf,
 				Args: elseIf.Expression,
 			}
@@ -304,7 +304,7 @@ func walkCommandsInStatement(stmt spec.Statement, depth int, fn WalkFunc) error 
 		// Walk ELSE body
 		if stmt.If.ElseBody != nil {
 			elseCmd := &Command{
-				Name: "ELSE",
+				Name: internCommandName("ELSE"),
 				Type: CommandTypeIf,
 				Args: []string{},
 			}
@@ -320,7 +320,7 @@ func walkCommandsInStatement(stmt spec.Statement, depth int, fn WalkFunc) error 
 	// Handle FOR statement
 	if stmt.For != nil {
 		forCmd := &Command{
-			Name: "FOR",
+			Name: internCommandName("FOR"),
 			Type: CommandTypeFor,
 			Args: stmt.For.Args,
 		}
@@ -337,7 +337,7 @@ func walkCommandsInStatement(stmt spec.Statement, depth int, fn WalkFunc) error 
 	// Handle WITH statement
 	if stmt.With != nil {
 		withCmd := &Command{
-			Name: stmt.With.Command.Name,
+			Name: internCommandName(stmt.With.Command.Name),
 			Type: CommandTypeWith,
 			Args: stmt.With.Command.Args,
 		}
@@ -354,7 +354,7 @@ func walkCommandsInStatement(stmt spec.Statement, depth int, fn WalkFunc) error 
 	// Handle TRY statement
 	if stmt.Try != nil {
 		tryCmd := &Command{
-			Name: "TRY",
+			Name: internCommandName("TRY"),
 			Type: CommandTypeTry,
 			Args: []string{},
 		}
@@ -370,7 +370,7 @@ func walkCommandsInStatement(stmt spec.Statement, depth int, fn WalkFunc) error 
 		// Walk CATCH body
 		if stmt.Try.CatchBody != nil {
 			catchCmd := &Command{
-				Name: "CATCH",
+				Name: internCommandName("CATCH"),
 				Type: CommandTypeTry,
 				Args: []string{},
 			}
@@ -385,7 +385,7 @@ func walkCommandsInStatement(stmt spec.Statement, depth int, fn WalkFunc) error 
 		// Walk FINALLY body
 		if stmt.Try.FinallyBody != nil {
 			finallyCmd := &Command{
-				Name: "FINALLY",
+				Name: internCommandName("FINALLY"),
 				Type: CommandTypeTry,
 				Args: []string{},
 			}
@@ -401,7 +401,7 @@ func walkCommandsInStatement(stmt spec.Statement, depth int, fn WalkFunc) error 
 	// Handle WAIT statement
 	if stmt.Wait != nil {
 		waitCmd := &Command{
-			Name: "WAIT",
+			Name: internCommandName("WAIT"),
 			Type: CommandTypeWait,
 			Args: []string{},
 		}

@@ -36,6 +36,8 @@ type Target struct {
 	Docs     string     // Documentation/comments before target
 	Commands []*Command // List of commands in this target
 	recipe   spec.Block // Raw AST recipe for traversal (internal use)
+	// Cached index for fast type-based lookups
+	commandsByType map[CommandType][]*Command
 }
 
 // Function represents a user-defined function with reusable commands.

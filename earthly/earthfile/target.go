@@ -2,6 +2,11 @@ package earthfile
 
 // FindCommands returns all commands of the specified type.
 func (t *Target) FindCommands(cmdType CommandType) []*Command {
+	// Fast-path using cached index if available
+	if t.commandsByType != nil {
+		return t.commandsByType[cmdType]
+	}
+	// Fallback: linear scan (builds a result slice each call)
 	var commands []*Command
 	for _, cmd := range t.Commands {
 		if cmd.Type == cmdType {
@@ -43,6 +48,9 @@ func (t *Target) GetImages() []*Command {
 
 // HasCommand returns true if the target has at least one command of the specified type.
 func (t *Target) HasCommand(cmdType CommandType) bool {
+	if t.commandsByType != nil {
+		return len(t.commandsByType[cmdType]) > 0
+	}
 	for _, cmd := range t.Commands {
 		if cmd.Type == cmdType {
 			return true

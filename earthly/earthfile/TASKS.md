@@ -139,25 +139,25 @@ This implementation SHALL conform to:
 ### Phase 6: Error Handling
 
 #### Task 13: Comprehensive Error Handling
-- [ ] Write tests for parse error scenarios
-- [ ] Test invalid Earthfile syntax handling
-- [ ] Test file not found errors
-- [ ] Test reader errors
-- [ ] Validate error wrapping maintains context chain
-- [ ] Run tests and `golangci-lint run`
+- [x] Write tests for parse error scenarios
+- [x] Test invalid Earthfile syntax handling
+- [x] Test file not found errors
+- [x] Test reader errors
+- [x] Validate error wrapping maintains context chain
+- [x] Run tests and `golangci-lint run`
 **Success Criteria**: All errors properly wrapped with context, actionable messages
 
 ### Phase 7: Performance & Optimization
 
 #### Task 15: Performance Optimizations
-- [ ] Write benchmarks for Parse operations
-- [ ] Write benchmarks for Target lookups
-- [ ] Write benchmarks for traversal operations
-- [ ] Implement string interning for command names
-- [ ] Minimize allocations in hot paths
-- [ ] Reuse visitor instances where possible
-- [ ] Validate performance targets met (see CORE_ARCHITECTURE.md benchmarks)
-- [ ] Run benchmarks and `golangci-lint run`
+- [x] Write benchmarks for Parse operations
+- [x] Write benchmarks for Target lookups
+- [x] Write benchmarks for traversal operations
+- [x] Implement string interning for command names
+- [x] Minimize allocations in hot paths
+- [x] Reuse visitor instances where possible
+- [x] Validate performance targets met (see CORE_ARCHITECTURE.md benchmarks)
+- [x] Run benchmarks and `golangci-lint run`
 **Success Criteria**: Meet or exceed target benchmarks, minimal allocations
 
 #### Task 16: AST Access & Extension Points
