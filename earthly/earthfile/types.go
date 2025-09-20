@@ -71,6 +71,14 @@ type Dependency struct {
 	Source string // Source target that has this dependency
 }
 
+// Reference represents a parsed reference to another target.
+type Reference struct {
+	Target string // Target name
+	Local  bool   // True if reference is local to this repo
+	Remote bool   // True if reference is remote
+	Path   string // Path component (for local refs)
+}
+
 // NewEarthfile creates a new Earthfile with initialized maps.
 func NewEarthfile() *Earthfile {
 	return &Earthfile{
