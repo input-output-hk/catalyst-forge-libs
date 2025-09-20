@@ -2,6 +2,9 @@ package earthfile
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTarget_FindCommands(t *testing.T) {
@@ -41,15 +44,11 @@ func TestTarget_FindCommands(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			commands := target.FindCommands(tt.commandType)
-			if len(commands) != tt.wantCount {
-				t.Errorf("FindCommands() returned %d commands, want %d", len(commands), tt.wantCount)
-			}
+			assert.Len(t, commands, tt.wantCount, "FindCommands() returned wrong number of commands")
 
 			// Verify all returned commands have the correct type
 			for _, cmd := range commands {
-				if cmd.Type != tt.commandType {
-					t.Errorf("FindCommands() returned command with type %v, want %v", cmd.Type, tt.commandType)
-				}
+				assert.Equal(t, tt.commandType, cmd.Type, "FindCommands() returned command with wrong type")
 			}
 		})
 	}
@@ -67,9 +66,7 @@ func TestTarget_GetFromBase(t *testing.T) {
 	}
 
 	got := target.GetFromBase()
-	if got != fromCmd {
-		t.Errorf("GetFromBase() = %v, want %v", got, fromCmd)
-	}
+	assert.Equal(t, fromCmd, got, "GetFromBase() returned wrong command")
 
 	// Test with no FROM command
 	targetNoFrom := &Target{
@@ -80,9 +77,8 @@ func TestTarget_GetFromBase(t *testing.T) {
 		},
 	}
 
-	if got := targetNoFrom.GetFromBase(); got != nil {
-		t.Errorf("GetFromBase() = %v, want nil", got)
-	}
+	got = targetNoFrom.GetFromBase()
+	assert.Nil(t, got, "GetFromBase() should return nil when no FROM command exists")
 }
 
 func TestTarget_GetArgs(t *testing.T) {
@@ -101,15 +97,9 @@ func TestTarget_GetArgs(t *testing.T) {
 	}
 
 	args := target.GetArgs()
-	if len(args) != 2 {
-		t.Errorf("GetArgs() returned %d commands, want 2", len(args))
-	}
-	if args[0] != arg1 {
-		t.Errorf("GetArgs()[0] = %v, want %v", args[0], arg1)
-	}
-	if args[1] != arg2 {
-		t.Errorf("GetArgs()[1] = %v, want %v", args[1], arg2)
-	}
+	assert.Len(t, args, 2, "GetArgs() returned wrong number of commands")
+	assert.Equal(t, arg1, args[0], "GetArgs()[0] returned wrong command")
+	assert.Equal(t, arg2, args[1], "GetArgs()[1] returned wrong command")
 }
 
 func TestTarget_GetBuilds(t *testing.T) {
@@ -127,15 +117,9 @@ func TestTarget_GetBuilds(t *testing.T) {
 	}
 
 	builds := target.GetBuilds()
-	if len(builds) != 2 {
-		t.Errorf("GetBuilds() returned %d commands, want 2", len(builds))
-	}
-	if builds[0] != build1 {
-		t.Errorf("GetBuilds()[0] = %v, want %v", builds[0], build1)
-	}
-	if builds[1] != build2 {
-		t.Errorf("GetBuilds()[1] = %v, want %v", builds[1], build2)
-	}
+	assert.Len(t, builds, 2, "GetBuilds() returned wrong number of commands")
+	assert.Equal(t, build1, builds[0], "GetBuilds()[0] returned wrong command")
+	assert.Equal(t, build2, builds[1], "GetBuilds()[1] returned wrong command")
 }
 
 func TestTarget_GetArtifacts(t *testing.T) {
@@ -153,15 +137,9 @@ func TestTarget_GetArtifacts(t *testing.T) {
 	}
 
 	artifacts := target.GetArtifacts()
-	if len(artifacts) != 2 {
-		t.Errorf("GetArtifacts() returned %d commands, want 2", len(artifacts))
-	}
-	if artifacts[0] != artifact1 {
-		t.Errorf("GetArtifacts()[0] = %v, want %v", artifacts[0], artifact1)
-	}
-	if artifacts[1] != artifact2 {
-		t.Errorf("GetArtifacts()[1] = %v, want %v", artifacts[1], artifact2)
-	}
+	assert.Len(t, artifacts, 2, "GetArtifacts() returned wrong number of commands")
+	assert.Equal(t, artifact1, artifacts[0], "GetArtifacts()[0] returned wrong command")
+	assert.Equal(t, artifact2, artifacts[1], "GetArtifacts()[1] returned wrong command")
 }
 
 func TestTarget_GetImages(t *testing.T) {
@@ -179,15 +157,9 @@ func TestTarget_GetImages(t *testing.T) {
 	}
 
 	images := target.GetImages()
-	if len(images) != 2 {
-		t.Errorf("GetImages() returned %d commands, want 2", len(images))
-	}
-	if images[0] != image1 {
-		t.Errorf("GetImages()[0] = %v, want %v", images[0], image1)
-	}
-	if images[1] != image2 {
-		t.Errorf("GetImages()[1] = %v, want %v", images[1], image2)
-	}
+	assert.Len(t, images, 2, "GetImages() returned wrong number of commands")
+	assert.Equal(t, image1, images[0], "GetImages()[0] returned wrong command")
+	assert.Equal(t, image2, images[1], "GetImages()[1] returned wrong command")
 }
 
 func TestTarget_HasCommand(t *testing.T) {
@@ -232,9 +204,7 @@ func TestTarget_HasCommand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := target.HasCommand(tt.commandType)
-			if got != tt.want {
-				t.Errorf("HasCommand() = %v, want %v", got, tt.want)
-			}
+			assert.Equal(t, tt.want, got, "HasCommand() returned wrong result")
 		})
 	}
 }
@@ -257,22 +227,14 @@ func TestTarget_Walk(t *testing.T) {
 		depths = append(depths, depth)
 		return nil
 	})
-	if err != nil {
-		t.Errorf("Walk() returned error: %v", err)
-	}
+	require.NoError(t, err, "Walk() should not return error")
 
-	if len(visited) != 3 {
-		t.Errorf("Walk() visited %d commands, want 3", len(visited))
-	}
+	assert.Len(t, visited, 3, "Walk() visited wrong number of commands")
 
 	// Verify commands are visited in order
 	for i, cmd := range target.Commands {
-		if visited[i] != cmd {
-			t.Errorf("Walk() visited[%d] = %v, want %v", i, visited[i], cmd)
-		}
-		if depths[i] != 0 {
-			t.Errorf("Walk() depth[%d] = %d, want 0", i, depths[i])
-		}
+		assert.Equal(t, cmd, visited[i], "Walk() visited wrong command at index %d", i)
+		assert.Equal(t, 0, depths[i], "Walk() depth should be 0 at index %d", i)
 	}
 }
 
@@ -297,13 +259,14 @@ func TestTarget_Walk_EarlyTermination(t *testing.T) {
 		return nil
 	})
 
-	if err != stopErr { //nolint:errorlint // comparing exact error instance
-		t.Errorf("Walk() returned %v, want %v", err, stopErr)
-	}
+	assert.Equal(
+		t,
+		stopErr,
+		err,
+		"Walk() should return early termination error",
+	)
 
-	if len(visited) != 2 {
-		t.Errorf("Walk() visited %d commands, want 2 (should stop after RUN)", len(visited))
-	}
+	assert.Len(t, visited, 2, "Walk() should visit 2 commands before early termination")
 }
 
 // Define an error for testing early termination

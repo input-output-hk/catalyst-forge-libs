@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/input-output-hk/catalyst-forge-libs/fs/billy"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParse(t *testing.T) {
@@ -24,40 +26,25 @@ test:
 	RUN go test ./...
 `
 	tmpFile, err := os.CreateTemp("", "Earthfile")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err, "Failed to create temp file")
 	defer os.Remove(tmpFile.Name())
 
-	if _, writeErr := tmpFile.WriteString(content); writeErr != nil {
-		t.Fatal(writeErr)
-	}
+	_, writeErr := tmpFile.WriteString(content)
+	require.NoError(t, writeErr, "Failed to write to temp file")
 	tmpFile.Close()
 
 	// Test Parse
 	ef, err := Parse(tmpFile.Name())
-	if err != nil {
-		t.Fatalf("Parse() error = %v", err)
-	}
+	require.NoError(t, err, "Parse() should not return an error")
+	require.NotNil(t, ef, "Parse() should return a non-nil Earthfile")
 
-	if ef == nil {
-		t.Fatal("Parse() returned nil Earthfile")
-	}
-
-	if ef.Version() != "0.8" {
-		t.Errorf("Expected version 0.8, got %s", ef.Version())
-	}
-
-	if !ef.HasVersion() {
-		t.Error("Expected HasVersion() to return true")
-	}
+	assert.Equal(t, "0.8", ef.Version(), "Version should be 0.8")
+	assert.True(t, ef.HasVersion(), "HasVersion() should return true")
 
 	// Check targets were parsed
 	targetNames := ef.TargetNames()
 	expectedTargets := []string{"build", "test"}
-	if len(targetNames) != len(expectedTargets) {
-		t.Errorf("Expected %d targets, got %d", len(expectedTargets), len(targetNames))
-	}
+	assert.Len(t, targetNames, len(expectedTargets), "Should have expected number of targets")
 }
 
 func TestParseString(t *testing.T) {
@@ -74,26 +61,14 @@ build:
 `
 
 	ef, err := ParseString(content)
-	if err != nil {
-		t.Fatalf("ParseString() error = %v", err)
-	}
+	require.NoError(t, err, "ParseString() should not return an error")
+	require.NotNil(t, ef, "ParseString() should return a non-nil Earthfile")
 
-	if ef == nil {
-		t.Fatal("ParseString() returned nil Earthfile")
-	}
-
-	if ef.Version() != "0.7" {
-		t.Errorf("Expected version 0.7, got %s", ef.Version())
-	}
+	assert.Equal(t, "0.7", ef.Version(), "Version should be 0.7")
 
 	// Check we have deps and build targets
-	if !ef.HasTarget("deps") {
-		t.Error("Expected to have 'deps' target")
-	}
-
-	if !ef.HasTarget("build") {
-		t.Error("Expected to have 'build' target")
-	}
+	assert.True(t, ef.HasTarget("deps"), "Should have 'deps' target")
+	assert.True(t, ef.HasTarget("build"), "Should have 'build' target")
 }
 
 func TestParseReader(t *testing.T) {
@@ -107,22 +82,13 @@ test:
 	reader := strings.NewReader(content)
 
 	ef, err := ParseReader(reader, "TestEarthfile")
-	if err != nil {
-		t.Fatalf("ParseReader() error = %v", err)
-	}
+	require.NoError(t, err, "ParseReader() should not return an error")
+	require.NotNil(t, ef, "ParseReader() should return a non-nil Earthfile")
 
-	if ef == nil {
-		t.Fatal("ParseReader() returned nil Earthfile")
-	}
-
-	if ef.Version() != "0.8" {
-		t.Errorf("Expected version 0.8, got %s", ef.Version())
-	}
+	assert.Equal(t, "0.8", ef.Version(), "Version should be 0.8")
 
 	target := ef.Target("test")
-	if target == nil {
-		t.Fatal("Expected to have 'test' target")
-	}
+	assert.NotNil(t, target, "Should have 'test' target")
 }
 
 func TestParseContext(t *testing.T) {
@@ -134,64 +100,44 @@ build:
 	RUN go build
 `
 	tmpFile, err := os.CreateTemp("", "Earthfile")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err, "Failed to create temp file")
 	defer os.Remove(tmpFile.Name())
 
-	if _, writeErr := tmpFile.WriteString(content); writeErr != nil {
-		t.Fatal(writeErr)
-	}
+	_, writeErr := tmpFile.WriteString(content)
+	require.NoError(t, writeErr, "Failed to write to temp file")
 	tmpFile.Close()
 
 	// Test with context
 	ctx := context.Background()
 	ef, err := ParseContext(ctx, tmpFile.Name())
-	if err != nil {
-		t.Fatalf("ParseContext() error = %v", err)
-	}
-
-	if ef == nil {
-		t.Fatal("ParseContext() returned nil Earthfile")
-	}
+	require.NoError(t, err, "ParseContext() should not return an error")
+	require.NotNil(t, ef, "ParseContext() should return a non-nil Earthfile")
 
 	// Test context cancellation
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
 	_, err = ParseContext(ctx, tmpFile.Name())
-	if err == nil {
-		t.Error("Expected error with cancelled context")
-	}
+	assert.Error(t, err, "Should return error with cancelled context")
 }
 
 func TestParseErrors(t *testing.T) {
 	// Test file not found
 	_, err := Parse("/non/existent/file")
-	if err == nil {
-		t.Error("Expected error for non-existent file")
-	}
+	assert.Error(t, err, "Should return error for non-existent file")
 
 	// Test invalid Earthfile syntax
 	invalidContent := `INVALID SYNTAX
 	This is not valid
 `
 	_, err = ParseString(invalidContent)
-	if err == nil {
-		t.Error("Expected error for invalid syntax")
-	}
+	assert.Error(t, err, "Should return error for invalid syntax")
 
 	// Test empty content
 	ef, err := ParseString("")
-	if err != nil {
-		t.Fatalf("Expected no error for empty content, got %v", err)
-	}
-	if ef == nil {
-		t.Fatal("Expected non-nil Earthfile for empty content")
-	}
-	if ef.HasVersion() {
-		t.Error("Empty Earthfile should not have version")
-	}
+	require.NoError(t, err, "Should not return error for empty content")
+	require.NotNil(t, ef, "Should return non-nil Earthfile for empty content")
+	assert.False(t, ef.HasVersion(), "Empty Earthfile should not have version")
 }
 
 func TestParseWithBaseCommands(t *testing.T) {
@@ -205,33 +151,19 @@ build:
 `
 
 	ef, err := ParseString(content)
-	if err != nil {
-		t.Fatalf("ParseString() error = %v", err)
-	}
+	require.NoError(t, err, "ParseString() should not return an error")
 
 	baseCommands := ef.BaseCommands()
-	if len(baseCommands) < 2 {
-		t.Errorf("Expected at least 2 base commands, got %d", len(baseCommands))
-	}
+	assert.GreaterOrEqual(t, len(baseCommands), 2, "Should have at least 2 base commands")
 
 	// Should have ARG and FROM as base commands
-	foundArg := false
-	foundFrom := false
-	for _, cmd := range baseCommands {
-		if cmd.Name == "ARG" {
-			foundArg = true
-		}
-		if cmd.Name == "FROM" {
-			foundFrom = true
-		}
+	commandNames := make([]string, len(baseCommands))
+	for i, cmd := range baseCommands {
+		commandNames[i] = cmd.Name
 	}
 
-	if !foundArg {
-		t.Error("Expected ARG in base commands")
-	}
-	if !foundFrom {
-		t.Error("Expected FROM in base commands")
-	}
+	assert.Contains(t, commandNames, "ARG", "Should contain ARG command")
+	assert.Contains(t, commandNames, "FROM", "Should contain FROM command")
 }
 
 func TestParseWithOptions(t *testing.T) {
@@ -243,45 +175,30 @@ build:
 	RUN echo "Building"
 `
 	tmpFile, err := os.CreateTemp("", "Earthfile")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err, "Failed to create temp file")
 	defer os.Remove(tmpFile.Name())
 
-	if _, writeErr := tmpFile.WriteString(content); writeErr != nil {
-		t.Fatal(writeErr)
-	}
+	_, writeErr := tmpFile.WriteString(content)
+	require.NoError(t, writeErr, "Failed to write to temp file")
 	tmpFile.Close()
 
 	// Test with default options
 	opts := &ParseOptions{}
 	ef, err := ParseWithOptions(tmpFile.Name(), opts)
-	if err != nil {
-		t.Fatalf("ParseWithOptions() error = %v", err)
-	}
-
-	if ef == nil {
-		t.Fatal("ParseWithOptions() returned nil Earthfile")
-	}
+	require.NoError(t, err, "ParseWithOptions() should not return an error")
+	require.NotNil(t, ef, "ParseWithOptions() should return a non-nil Earthfile")
 
 	// Test with source map enabled
 	opts = &ParseOptions{
 		EnableSourceMap: true,
 	}
 	ef, err = ParseWithOptions(tmpFile.Name(), opts)
-	if err != nil {
-		t.Fatalf("ParseWithOptions() with source map error = %v", err)
-	}
+	require.NoError(t, err, "ParseWithOptions() with source map should not return an error")
 
 	// Check that source locations are populated
 	target := ef.Target("build")
-	if target == nil {
-		t.Fatal("Expected 'build' target")
-	}
-
-	if len(target.Commands) == 0 {
-		t.Fatal("Expected commands in target")
-	}
+	require.NotNil(t, target, "Should have 'build' target")
+	require.NotEmpty(t, target.Commands, "Should have commands in target")
 
 	// Note: Source maps are not currently supported when using filesystem abstraction
 	// due to limitations in the underlying AST parser's FromReader approach.
@@ -306,14 +223,11 @@ test:
 `
 
 	tmpFile, err := os.CreateTemp("", "Earthfile")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err, "Failed to create temp file")
 	defer os.Remove(tmpFile.Name())
 
-	if _, writeErr := tmpFile.WriteString(content); writeErr != nil {
-		t.Fatal(writeErr)
-	}
+	_, writeErr := tmpFile.WriteString(content)
+	require.NoError(t, writeErr, "Failed to write to temp file")
 	tmpFile.Close()
 
 	// Test with strict mode disabled (should pass)
@@ -321,13 +235,8 @@ test:
 		StrictMode: false,
 	}
 	ef, err := ParseWithOptions(tmpFile.Name(), opts)
-	if err != nil {
-		t.Fatalf("ParseWithOptions() without strict mode error = %v", err)
-	}
-
-	if ef == nil {
-		t.Fatal("ParseWithOptions() returned nil Earthfile")
-	}
+	require.NoError(t, err, "ParseWithOptions() without strict mode should not return an error")
+	require.NotNil(t, ef, "ParseWithOptions() should return a non-nil Earthfile")
 
 	// Test with strict mode enabled
 	opts = &ParseOptions{
@@ -335,9 +244,7 @@ test:
 	}
 	_, err = ParseWithOptions(tmpFile.Name(), opts)
 	// In strict mode, it should still parse successfully for valid Earthfiles
-	if err != nil {
-		t.Fatalf("ParseWithOptions() with strict mode error = %v", err)
-	}
+	require.NoError(t, err, "ParseWithOptions() with strict mode should not return an error")
 }
 
 func TestParseOptionsSourceMapDisabled(t *testing.T) {
@@ -348,14 +255,11 @@ build:
 `
 
 	tmpFile, err := os.CreateTemp("", "Earthfile")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err, "Failed to create temp file")
 	defer os.Remove(tmpFile.Name())
 
-	if _, writeErr := tmpFile.WriteString(content); writeErr != nil {
-		t.Fatal(writeErr)
-	}
+	_, writeErr := tmpFile.WriteString(content)
+	require.NoError(t, writeErr, "Failed to write to temp file")
 	tmpFile.Close()
 
 	// Test with source map explicitly disabled
@@ -363,14 +267,10 @@ build:
 		EnableSourceMap: false,
 	}
 	ef, err := ParseWithOptions(tmpFile.Name(), opts)
-	if err != nil {
-		t.Fatalf("ParseWithOptions() error = %v", err)
-	}
+	require.NoError(t, err, "ParseWithOptions() should not return an error")
 
 	target := ef.Target("build")
-	if target == nil {
-		t.Fatal("Expected 'build' target")
-	}
+	require.NotNil(t, target, "Should have 'build' target")
 
 	// With source map disabled, locations should still be present for now
 	// (our simple parser always includes them)
@@ -477,26 +377,21 @@ build:
 		t.Run(tt.name, func(t *testing.T) {
 			// Test ParseVersion with string content
 			got, err := ParseVersion(tt.content)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ParseVersion() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr {
+				assert.Error(t, err, "ParseVersion() should return an error")
 				return
 			}
 
-			if got != tt.want {
-				t.Errorf("ParseVersion() = %v, want %v", got, tt.want)
-			}
+			require.NoError(t, err, "ParseVersion() should not return an error")
+			assert.Equal(t, tt.want, got, "ParseVersion() mismatch")
 		})
 	}
 }
 
 func TestParseVersion_EmptyString(t *testing.T) {
 	version, err := ParseVersion("")
-	if err != nil {
-		t.Errorf("ParseVersion() unexpected error for empty string: %v", err)
-	}
-	if version != "" {
-		t.Errorf("ParseVersion() expected empty version for empty content, got %v", version)
-	}
+	require.NoError(t, err, "ParseVersion() should not return error for empty string")
+	assert.Equal(t, "", version, "ParseVersion() should return empty version for empty content")
 }
 
 func TestParseVersion_InvalidVersion(t *testing.T) {
@@ -525,8 +420,8 @@ func TestParseVersion_InvalidVersion(t *testing.T) {
 			_, err := ParseVersion(tt.content)
 			// The AST parser doesn't validate versions in ParseVersion, only in full parse
 			// So we expect no error but the version string as-is
-			if err != nil && tt.name != "version with no argument" {
-				t.Errorf("ParseVersion() unexpected error: %v", err)
+			if tt.name != "version with no argument" {
+				assert.NoError(t, err, "ParseVersion() should not return error for invalid version formats")
 			}
 			// Note: In a real implementation, we might want to validate here
 		})
@@ -549,13 +444,8 @@ mybuild:
 
 	// ParseVersion should succeed even though full parse would fail
 	got, err := ParseVersion(content)
-	if err != nil {
-		t.Errorf("ParseVersion() unexpected error: %v", err)
-	}
-
-	if got != "0.7" {
-		t.Errorf("ParseVersion() = %v, want 0.7", got)
-	}
+	require.NoError(t, err, "ParseVersion() should not return error even with invalid syntax after VERSION")
+	assert.Equal(t, "0.7", got, "ParseVersion() should return correct version")
 }
 
 func TestParseVersionWithFilesystem(t *testing.T) {
@@ -594,25 +484,18 @@ func TestParseVersionWithFilesystem(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Write test file
 			filename := "test-" + tc.name + ".earth"
-			if err := memFS.WriteFile(filename, []byte(tc.content), 0o644); err != nil {
-				t.Fatalf("Failed to write test file: %v", err)
-			}
+			err := memFS.WriteFile(filename, []byte(tc.content), 0o644)
+			require.NoError(t, err, "Failed to write test file")
 
 			// Read content from filesystem
 			content, err := memFS.ReadFile(filename)
-			if err != nil {
-				t.Fatalf("Failed to read test file: %v", err)
-			}
+			require.NoError(t, err, "Failed to read test file")
 
 			// Parse version from content
 			version, err := ParseVersion(string(content))
-			if err != nil {
-				t.Fatalf("Failed to parse version: %v", err)
-			}
+			require.NoError(t, err, "Failed to parse version")
 
-			if version != tc.expected {
-				t.Errorf("Expected version %q, got %q", tc.expected, version)
-			}
+			assert.Equal(t, tc.expected, version, "Version should match expected")
 		})
 	}
 }

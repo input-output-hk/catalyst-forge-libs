@@ -2,6 +2,9 @@ package earthfile
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDependencies(t *testing.T) {
@@ -18,7 +21,7 @@ build:
 	FROM alpine:3.14
 	RUN echo "hello"
 `,
-			expected: []Dependency{},
+			expected: nil,
 		},
 		{
 			name: "local BUILD dependency",
@@ -236,46 +239,17 @@ build:
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ef, err := ParseString(tt.content)
-			if err != nil {
-				t.Fatalf("Failed to parse: %v", err)
-			}
+			require.NoError(t, err, "ParseString should not return an error")
 
 			// Call Dependencies() multiple times to test lazy loading
 			deps1 := ef.Dependencies()
 			deps2 := ef.Dependencies()
 
 			// Should return the same instance (lazy loaded)
-			if len(deps1) != len(deps2) {
-				t.Errorf("Lazy loading not working: first call returned %d deps, second returned %d",
-					len(deps1), len(deps2))
-			}
+			assert.Equal(t, len(deps1), len(deps2), "Lazy loading should return consistent dependency count")
 
-			// Check dependencies count
-			if len(deps1) != len(tt.expected) {
-				t.Errorf("Expected %d dependencies, got %d", len(tt.expected), len(deps1))
-				t.Logf("Expected: %+v", tt.expected)
-				t.Logf("Got: %+v", deps1)
-				return
-			}
-
-			// Check each dependency
-			for i, expected := range tt.expected {
-				if i >= len(deps1) {
-					t.Errorf("Missing dependency at index %d: expected %+v", i, expected)
-					continue
-				}
-
-				actual := deps1[i]
-				if actual.Target != expected.Target {
-					t.Errorf("Dependency %d: expected target %q, got %q", i, expected.Target, actual.Target)
-				}
-				if actual.Local != expected.Local {
-					t.Errorf("Dependency %d: expected Local=%v, got %v", i, expected.Local, actual.Local)
-				}
-				if actual.Source != expected.Source {
-					t.Errorf("Dependency %d: expected source %q, got %q", i, expected.Source, actual.Source)
-				}
-			}
+			// Check dependencies
+			assert.Equal(t, tt.expected, deps1, "Dependencies should match expected")
 		})
 	}
 }
@@ -291,45 +265,31 @@ test:
 `
 
 	ef, err := ParseString(content)
-	if err != nil {
-		t.Fatalf("Failed to parse: %v", err)
-	}
+	require.NoError(t, err, "ParseString should not return an error")
 
 	// Dependencies should be nil initially
-	if ef.dependencies != nil {
-		t.Error("Dependencies should not be initialized before first call")
-	}
+	assert.Nil(t, ef.dependencies, "Dependencies should not be initialized before first call")
 
 	// First call should initialize
 	deps := ef.Dependencies()
-	if ef.dependencies == nil {
-		t.Error("Dependencies should be initialized after first call")
-	}
+	assert.NotNil(t, ef.dependencies, "Dependencies should be initialized after first call")
 
 	// Should have the expected dependency
-	if len(deps) != 1 {
-		t.Errorf("Expected 1 dependency, got %d", len(deps))
-	}
+	assert.Len(t, deps, 1, "Should have exactly 1 dependency")
 
 	// Second call should return cached result
 	deps2 := ef.Dependencies()
-	if len(deps2) != 1 {
-		t.Errorf("Expected cached result with 1 dependency, got %d", len(deps2))
-	}
+	assert.Len(t, deps2, 1, "Cached result should have exactly 1 dependency")
 }
 
 func TestDependencies_EmptyEarthfile(t *testing.T) {
 	content := `VERSION 0.7`
 
 	ef, err := ParseString(content)
-	if err != nil {
-		t.Fatalf("Failed to parse: %v", err)
-	}
+	require.NoError(t, err, "ParseString should not return an error")
 
 	deps := ef.Dependencies()
-	if len(deps) != 0 {
-		t.Errorf("Expected no dependencies for empty Earthfile, got %d", len(deps))
-	}
+	assert.Len(t, deps, 0, "Empty Earthfile should have no dependencies")
 }
 
 func TestDependencies_ComplexTargetReference(t *testing.T) {
@@ -342,33 +302,20 @@ build:
 `
 
 	ef, err := ParseString(content)
-	if err != nil {
-		t.Fatalf("Failed to parse: %v", err)
-	}
+	require.NoError(t, err, "ParseString should not return an error")
 
 	deps := ef.Dependencies()
-	if len(deps) != 3 {
-		t.Errorf("Expected 3 dependencies, got %d", len(deps))
-	}
+	require.Len(t, deps, 3, "Should have exactly 3 dependencies")
 
-	if len(deps) >= 1 {
-		// Check remote dependency
-		if deps[0].Target != "github.com/earthly/earthly/examples/go+docker" || deps[0].Local {
-			t.Errorf("First dependency should be remote: %+v", deps[0])
-		}
-	}
+	// Check remote dependency
+	assert.Equal(t, "github.com/earthly/earthly/examples/go+docker", deps[0].Target, "First dependency target mismatch")
+	assert.False(t, deps[0].Local, "First dependency should be remote")
 
-	if len(deps) >= 2 {
-		// Check relative local dependency
-		if deps[1].Target != "./../../other/project+target" || !deps[1].Local {
-			t.Errorf("Second dependency should be local: %+v", deps[1])
-		}
-	}
+	// Check relative local dependency
+	assert.Equal(t, "./../../other/project+target", deps[1].Target, "Second dependency target mismatch")
+	assert.True(t, deps[1].Local, "Second dependency should be local")
 
-	if len(deps) >= 3 {
-		// Check COPY with artifact path
-		if deps[2].Target != "github.com/org/repo+build" || deps[2].Local {
-			t.Errorf("Third dependency should be remote (extracted from COPY): %+v", deps[2])
-		}
-	}
+	// Check COPY with artifact path
+	assert.Equal(t, "github.com/org/repo+build", deps[2].Target, "Third dependency target mismatch")
+	assert.False(t, deps[2].Local, "Third dependency should be remote (extracted from COPY)")
 }

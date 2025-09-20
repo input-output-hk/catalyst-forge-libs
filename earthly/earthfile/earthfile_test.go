@@ -2,6 +2,8 @@ package earthfile
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestEarthfile_Target(t *testing.T) {
@@ -37,9 +39,7 @@ func TestEarthfile_Target(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := ef.Target(tt.targetName)
-			if got != tt.want {
-				t.Errorf("Target() = %v, want %v", got, tt.want)
-			}
+			assert.Equal(t, tt.want, got, "Target() mismatch")
 		})
 	}
 }
@@ -56,22 +56,16 @@ func TestEarthfile_Targets(t *testing.T) {
 	}
 
 	targets := ef.Targets()
-	if len(targets) != 2 {
-		t.Errorf("Targets() returned %d targets, want 2", len(targets))
-	}
+	assert.Len(t, targets, 2, "Targets() should return exactly 2 targets")
 
 	// Check that both targets are in the result
-	found := make(map[string]bool)
-	for _, target := range targets {
-		found[target.Name] = true
+	targetNames := make([]string, len(targets))
+	for i, target := range targets {
+		targetNames[i] = target.Name
 	}
 
-	if !found["build"] {
-		t.Error("Targets() missing 'build' target")
-	}
-	if !found["test"] {
-		t.Error("Targets() missing 'test' target")
-	}
+	assert.Contains(t, targetNames, "build", "Targets() should contain 'build' target")
+	assert.Contains(t, targetNames, "test", "Targets() should contain 'test' target")
 }
 
 func TestEarthfile_TargetNames(t *testing.T) {
@@ -84,21 +78,12 @@ func TestEarthfile_TargetNames(t *testing.T) {
 	}
 
 	names := ef.TargetNames()
-	if len(names) != 3 {
-		t.Errorf("TargetNames() returned %d names, want 3", len(names))
-	}
+	assert.Len(t, names, 3, "TargetNames() should return exactly 3 names")
 
-	// Check that all names are present
-	found := make(map[string]bool)
-	for _, name := range names {
-		found[name] = true
-	}
-
+	// Check that all expected names are present
 	expected := []string{"build", "test", "lint"}
 	for _, exp := range expected {
-		if !found[exp] {
-			t.Errorf("TargetNames() missing '%s'", exp)
-		}
+		assert.Contains(t, names, exp, "TargetNames() should contain '%s'", exp)
 	}
 }
 
@@ -135,9 +120,7 @@ func TestEarthfile_HasTarget(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := ef.HasTarget(tt.targetName)
-			if got != tt.want {
-				t.Errorf("HasTarget() = %v, want %v", got, tt.want)
-			}
+			assert.Equal(t, tt.want, got, "HasTarget() mismatch")
 		})
 	}
 }
@@ -178,9 +161,7 @@ func TestEarthfile_Function(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := ef.Function(tt.funcName)
-			if got != tt.want {
-				t.Errorf("Function() = %v, want %v", got, tt.want)
-			}
+			assert.Equal(t, tt.want, got, "Function() mismatch")
 		})
 	}
 }
@@ -197,22 +178,16 @@ func TestEarthfile_Functions(t *testing.T) {
 	}
 
 	functions := ef.Functions()
-	if len(functions) != 2 {
-		t.Errorf("Functions() returned %d functions, want 2", len(functions))
-	}
+	assert.Len(t, functions, 2, "Functions() should return exactly 2 functions")
 
 	// Check that both functions are in the result
-	found := make(map[string]bool)
-	for _, fn := range functions {
-		found[fn.Name] = true
+	functionNames := make([]string, len(functions))
+	for i, fn := range functions {
+		functionNames[i] = fn.Name
 	}
 
-	if !found["helper"] {
-		t.Error("Functions() missing 'helper' function")
-	}
-	if !found["common"] {
-		t.Error("Functions() missing 'common' function")
-	}
+	assert.Contains(t, functionNames, "helper", "Functions() should contain 'helper' function")
+	assert.Contains(t, functionNames, "common", "Functions() should contain 'common' function")
 }
 
 func TestEarthfile_BaseCommands_Already_Defined(t *testing.T) {
@@ -225,15 +200,9 @@ func TestEarthfile_BaseCommands_Already_Defined(t *testing.T) {
 	}
 
 	commands := ef.BaseCommands()
-	if len(commands) != 2 {
-		t.Errorf("BaseCommands() returned %d commands, want 2", len(commands))
-	}
-	if commands[0] != cmd1 {
-		t.Errorf("BaseCommands()[0] = %v, want %v", commands[0], cmd1)
-	}
-	if commands[1] != cmd2 {
-		t.Errorf("BaseCommands()[1] = %v, want %v", commands[1], cmd2)
-	}
+	assert.Len(t, commands, 2, "BaseCommands() should return exactly 2 commands")
+	assert.Equal(t, cmd1, commands[0], "BaseCommands()[0] should be cmd1")
+	assert.Equal(t, cmd2, commands[1], "BaseCommands()[1] should be cmd2")
 }
 
 func TestEarthfile_Version_Already_Defined(t *testing.T) {
@@ -262,13 +231,11 @@ func TestEarthfile_Version_Already_Defined(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ef := &Earthfile{version: tt.version}
 
-			if got := ef.Version(); got != tt.want {
-				t.Errorf("Version() = %v, want %v", got, tt.want)
-			}
+			got := ef.Version()
+			assert.Equal(t, tt.want, got, "Version() mismatch")
 
-			if got := ef.HasVersion(); got != tt.hasVer {
-				t.Errorf("HasVersion() = %v, want %v", got, tt.hasVer)
-			}
+			gotHasVer := ef.HasVersion()
+			assert.Equal(t, tt.hasVer, gotHasVer, "HasVersion() mismatch")
 		})
 	}
 }
@@ -280,9 +247,8 @@ func TestEarthfile_AST_Already_Defined(t *testing.T) {
 		ast: nil, // We'll use nil for simplicity
 	}
 
-	if got := ef.AST(); got != nil {
-		t.Errorf("AST() = %v, want nil", got)
-	}
+	got := ef.AST()
+	assert.Nil(t, got, "AST() should return nil")
 }
 
 func TestEarthfile_Dependencies_Already_Defined(t *testing.T) {
@@ -299,12 +265,6 @@ func TestEarthfile_Dependencies_Already_Defined(t *testing.T) {
 	}
 
 	got := ef.Dependencies()
-	if len(got) != 2 {
-		t.Errorf("Dependencies() returned %d dependencies, want 2", len(got))
-	}
-	for i, dep := range got {
-		if dep != deps[i] {
-			t.Errorf("Dependencies()[%d] = %v, want %v", i, dep, deps[i])
-		}
-	}
+	assert.Len(t, got, 2, "Dependencies() should return exactly 2 dependencies")
+	assert.Equal(t, deps, got, "Dependencies() should return the exact dependencies")
 }

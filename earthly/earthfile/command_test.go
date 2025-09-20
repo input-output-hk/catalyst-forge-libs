@@ -2,6 +2,9 @@ package earthfile
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCommand_GetFlag(t *testing.T) {
@@ -67,12 +70,8 @@ func TestCommand_GetFlag(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, ok := tt.command.GetFlag(tt.flagName)
-			if got != tt.want {
-				t.Errorf("GetFlag() value = %v, want %v", got, tt.want)
-			}
-			if ok != tt.wantOk {
-				t.Errorf("GetFlag() ok = %v, want %v", ok, tt.wantOk)
-			}
+			assert.Equal(t, tt.want, got, "GetFlag() value mismatch")
+			assert.Equal(t, tt.wantOk, ok, "GetFlag() ok mismatch")
 		})
 	}
 }
@@ -113,7 +112,7 @@ func TestCommand_GetPositionalArgs(t *testing.T) {
 				Name: "FROM",
 				Args: []string{},
 			},
-			want: []string{},
+			want: nil,
 		},
 		{
 			name: "only flags",
@@ -121,7 +120,7 @@ func TestCommand_GetPositionalArgs(t *testing.T) {
 				Name: "SAVE IMAGE",
 				Args: []string{"--push", "--cache-from=type=registry"},
 			},
-			want: []string{},
+			want: nil,
 		},
 		{
 			name: "mixed flags and args",
@@ -144,15 +143,7 @@ func TestCommand_GetPositionalArgs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := tt.command.GetPositionalArgs()
-			if len(got) != len(tt.want) {
-				t.Errorf("GetPositionalArgs() returned %d args, want %d", len(got), len(tt.want))
-				return
-			}
-			for i, arg := range got {
-				if arg != tt.want[i] {
-					t.Errorf("GetPositionalArgs()[%d] = %v, want %v", i, arg, tt.want[i])
-				}
-			}
+			assert.Equal(t, tt.want, got, "GetPositionalArgs() mismatch")
 		})
 	}
 }
@@ -216,9 +207,7 @@ func TestCommand_IsRemoteReference(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := tt.command.IsRemoteReference()
-			if got != tt.want {
-				t.Errorf("IsRemoteReference() = %v, want %v", got, tt.want)
-			}
+			assert.Equal(t, tt.want, got, "IsRemoteReference() mismatch")
 		})
 	}
 }
@@ -234,18 +223,10 @@ func compareReference(t *testing.T, got, want *Reference) {
 		return
 	}
 	if got != nil && want != nil {
-		if got.Target != want.Target {
-			t.Errorf("GetReference().Target = %v, want %v", got.Target, want.Target)
-		}
-		if got.Local != want.Local {
-			t.Errorf("GetReference().Local = %v, want %v", got.Local, want.Local)
-		}
-		if got.Remote != want.Remote {
-			t.Errorf("GetReference().Remote = %v, want %v", got.Remote, want.Remote)
-		}
-		if got.Path != want.Path {
-			t.Errorf("GetReference().Path = %v, want %v", got.Path, want.Path)
-		}
+		assert.Equal(t, want.Target, got.Target, "GetReference().Target mismatch")
+		assert.Equal(t, want.Local, got.Local, "GetReference().Local mismatch")
+		assert.Equal(t, want.Remote, got.Remote, "GetReference().Remote mismatch")
+		assert.Equal(t, want.Path, got.Path, "GetReference().Path mismatch")
 	}
 }
 
@@ -335,13 +316,13 @@ func TestCommand_GetReference(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := tt.command.GetReference()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("GetReference() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr {
+				require.Error(t, err, "GetReference() should return an error")
 				return
 			}
-			if !tt.wantErr {
-				compareReference(t, got, tt.want)
-			}
+
+			require.NoError(t, err, "GetReference() should not return an error")
+			compareReference(t, got, tt.want)
 		})
 	}
 }
@@ -361,9 +342,7 @@ func TestCommand_SourceLocation(t *testing.T) {
 	}
 
 	got := cmd.SourceLocation()
-	if got != loc {
-		t.Errorf("SourceLocation() = %v, want %v", got, loc)
-	}
+	assert.Equal(t, loc, got, "SourceLocation() with location should return the location")
 
 	// Test with nil location
 	cmdNoLoc := &Command{
@@ -371,7 +350,6 @@ func TestCommand_SourceLocation(t *testing.T) {
 		Location: nil,
 	}
 
-	if got := cmdNoLoc.SourceLocation(); got != nil {
-		t.Errorf("SourceLocation() = %v, want nil", got)
-	}
+	gotNil := cmdNoLoc.SourceLocation()
+	assert.Nil(t, gotNil, "SourceLocation() with nil location should return nil")
 }

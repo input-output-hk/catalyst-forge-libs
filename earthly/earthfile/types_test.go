@@ -2,26 +2,17 @@ package earthfile
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestEarthfileStruct(t *testing.T) {
 	ef := NewEarthfile()
 
-	if ef.targets == nil {
-		t.Error("Earthfile.targets map should be initialized")
-	}
-
-	if ef.functions == nil {
-		t.Error("Earthfile.functions map should be initialized")
-	}
-
-	if ef.Version() != "" {
-		t.Error("Earthfile.Version() should return empty string when not set")
-	}
-
-	if ef.HasVersion() {
-		t.Error("Earthfile.HasVersion() should return false when version not set")
-	}
+	assert.NotNil(t, ef.targets, "Earthfile.targets map should be initialized")
+	assert.NotNil(t, ef.functions, "Earthfile.functions map should be initialized")
+	assert.Equal(t, "", ef.Version(), "Earthfile.Version() should return empty string when not set")
+	assert.False(t, ef.HasVersion(), "Earthfile.HasVersion() should return false when version not set")
 }
 
 func TestTargetStruct(t *testing.T) {
@@ -37,17 +28,9 @@ func TestTargetStruct(t *testing.T) {
 		},
 	}
 
-	if target.Name != "build" {
-		t.Errorf("Expected target name 'build', got '%s'", target.Name)
-	}
-
-	if target.Docs != "Build target" {
-		t.Errorf("Expected docs 'Build target', got '%s'", target.Docs)
-	}
-
-	if len(target.Commands) != 1 {
-		t.Errorf("Expected 1 command, got %d", len(target.Commands))
-	}
+	assert.Equal(t, "build", target.Name, "target name should match")
+	assert.Equal(t, "Build target", target.Docs, "target docs should match")
+	assert.Len(t, target.Commands, 1, "target should have 1 command")
 }
 
 func TestFunctionStruct(t *testing.T) {
@@ -62,13 +45,8 @@ func TestFunctionStruct(t *testing.T) {
 		},
 	}
 
-	if fn.Name != "MY_FUNC" {
-		t.Errorf("Expected function name 'MY_FUNC', got '%s'", fn.Name)
-	}
-
-	if len(fn.Commands) != 1 {
-		t.Errorf("Expected 1 command, got %d", len(fn.Commands))
-	}
+	assert.Equal(t, "MY_FUNC", fn.Name, "function name should match")
+	assert.Len(t, fn.Commands, 1, "function should have 1 command")
 }
 
 func TestCommandStruct(t *testing.T) {
@@ -85,21 +63,10 @@ func TestCommandStruct(t *testing.T) {
 		},
 	}
 
-	if cmd.Name != "COPY" {
-		t.Errorf("Expected command name 'COPY', got '%s'", cmd.Name)
-	}
-
-	if cmd.Type != CommandTypeCopy {
-		t.Errorf("Expected command type CommandTypeCopy, got %v", cmd.Type)
-	}
-
-	if len(cmd.Args) != 2 {
-		t.Errorf("Expected 2 args, got %d", len(cmd.Args))
-	}
-
-	if cmd.Location == nil {
-		t.Error("Expected source location to be set")
-	}
+	assert.Equal(t, "COPY", cmd.Name, "command name should match")
+	assert.Equal(t, CommandTypeCopy, cmd.Type, "command type should match")
+	assert.Len(t, cmd.Args, 2, "command should have 2 args")
+	assert.NotNil(t, cmd.Location, "source location should be set")
 }
 
 func TestCommandType(t *testing.T) {
@@ -143,9 +110,7 @@ func TestCommandType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.cmdType.String() != tt.name {
-				t.Errorf("CommandType.String() = %v, want %v", tt.cmdType.String(), tt.name)
-			}
+			assert.Equal(t, tt.name, tt.cmdType.String(), "CommandType.String() should match expected name")
 		})
 	}
 }
@@ -159,11 +124,6 @@ func TestSourceLocation(t *testing.T) {
 		EndColumn:   15,
 	}
 
-	if loc.File != "Earthfile" {
-		t.Errorf("Expected file 'Earthfile', got '%s'", loc.File)
-	}
-
-	if loc.StartLine != 10 {
-		t.Errorf("Expected start line 10, got %d", loc.StartLine)
-	}
+	assert.Equal(t, "Earthfile", loc.File, "source location file should match")
+	assert.Equal(t, 10, loc.StartLine, "source location start line should match")
 }

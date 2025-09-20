@@ -119,43 +119,33 @@ This implementation SHALL conform to:
 ### Phase 5: Analysis Features
 
 #### Task 11: Dependency Resolution
-- [ ] Write failing tests for Dependencies() method
-- [ ] Define Dependency struct (Target, Local, Source fields)
-- [ ] Parse BUILD, FROM, COPY commands for dependencies
-- [ ] Classify dependencies as local vs remote
-- [ ] Implement lazy loading with caching
-- [ ] Build dependency graph structure
-- [ ] Run tests and `golangci-lint run`
+- [x] Write failing tests for Dependencies() method
+- [x] Define Dependency struct (Target, Local, Source fields)
+- [x] Parse BUILD, FROM, COPY commands for dependencies
+- [x] Classify dependencies as local vs remote
+- [x] Implement lazy loading with caching
+- [x] Build dependency graph structure
+- [x] Run tests and `golangci-lint run`
 **Success Criteria**: All dependencies identified and classified correctly
 
 #### Task 12: Version Parsing Optimization
-- [ ] Write failing tests for lightweight version parsing
-- [ ] Implement ParseVersion(path) for VERSION-only parsing
-- [ ] Validate version format (0.6, 0.7, 0.8)
-- [ ] Handle missing VERSION gracefully (return nil)
-- [ ] Run tests and `golangci-lint run`
+- [x] Write failing tests for lightweight version parsing
+- [x] Implement ParseVersion(path) for VERSION-only parsing
+- [x] Validate version format (0.6, 0.7, 0.8)
+- [x] Handle missing VERSION gracefully (return nil)
+- [x] Run tests and `golangci-lint run`
 **Success Criteria**: Fast version extraction without full parse
 
-### Phase 6: Error Handling & Validation
+### Phase 6: Error Handling
 
 #### Task 13: Comprehensive Error Handling
 - [ ] Write tests for parse error scenarios
 - [ ] Test invalid Earthfile syntax handling
 - [ ] Test file not found errors
 - [ ] Test reader errors
-- [ ] Ensure errors include file:line:column when available
 - [ ] Validate error wrapping maintains context chain
 - [ ] Run tests and `golangci-lint run`
 **Success Criteria**: All errors properly wrapped with context, actionable messages
-
-#### Task 14: Validation Rules
-- [ ] Write failing tests for validation rules
-- [ ] Validate no duplicate target names
-- [ ] Validate no targets named "base" (reserved)
-- [ ] Validate VERSION format if present
-- [ ] Return clear validation errors
-- [ ] Run tests and `golangci-lint run`
-**Success Criteria**: All validation rules enforced, clear error messages
 
 ### Phase 7: Performance & Optimization
 
