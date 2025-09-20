@@ -97,23 +97,23 @@ This implementation SHALL conform to:
 ### Phase 4: Traversal System
 
 #### Task 9: Visitor Pattern Implementation
-- [ ] Write failing tests for Visitor interface
-- [ ] Define Visitor interface with all Visit methods
-- [ ] Implement Walk(Visitor) on Earthfile
-- [ ] Implement Walk(Visitor) on Target
-- [ ] Handle nested statement traversal (IF/FOR/WITH blocks)
-- [ ] Test visitor receives all nodes in correct order
-- [ ] Run tests and `golangci-lint run`
+- [x] Write failing tests for Visitor interface
+- [x] Define Visitor interface with all Visit methods
+- [x] Implement Walk(Visitor) on Earthfile
+- [x] Implement Walk(Visitor) on Target
+- [x] Handle nested statement traversal (IF/FOR/WITH blocks)
+- [x] Test visitor receives all nodes in correct order
+- [x] Run tests and `golangci-lint run`
 **Success Criteria**: Visitor pattern traverses entire AST correctly
 
 #### Task 10: Callback Pattern Implementation
-- [ ] Write failing tests for WalkCommands
-- [ ] Define WalkFunc type signature
-- [ ] Implement WalkCommands(WalkFunc) on Earthfile
-- [ ] Implement Walk(WalkFunc) on Target
-- [ ] Support depth tracking in callbacks
-- [ ] Handle early termination via error return
-- [ ] Run tests and `golangci-lint run`
+- [x] Write failing tests for WalkCommands
+- [x] Define WalkFunc type signature
+- [x] Implement WalkCommands(WalkFunc) on Earthfile
+- [x] Implement Walk(WalkFunc) on Target
+- [x] Support depth tracking in callbacks
+- [x] Handle early termination via error return
+- [x] Run tests and `golangci-lint run`
 **Success Criteria**: Simple traversal works, depth tracked, early exit supported
 
 ### Phase 5: Analysis Features

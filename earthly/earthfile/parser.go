@@ -1,8 +1,6 @@
 package earthfile
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -144,51 +142,28 @@ func ParseReaderWithOptions(reader io.Reader, name string, opts *ParseOptions) (
 	return convertASTToDomain(&astEarthfile, opts)
 }
 
-// ParseVersion parses only the VERSION from an Earthfile (lightweight operation).
-func ParseVersion(path string) (string, error) {
-	return ParseVersionWithFilesystem(path, nil)
-}
+// ParseVersion parses only the VERSION from an Earthfile string (lightweight operation).
+// Returns the version string (e.g., "0.7") or empty string if no VERSION found.
+// This uses the AST parser's lightweight ParseVersionOpts function with a reader.
+func ParseVersion(content string) (string, error) {
+	// Create a NamedReader from the string content
+	reader := newNamedReader([]byte(content), "Earthfile")
 
-// ParseVersionWithFilesystem parses only the VERSION from an Earthfile using the provided filesystem.
-func ParseVersionWithFilesystem(path string, filesystem fs.Filesystem) (string, error) {
-	// Use default filesystem if nil
-	if filesystem == nil {
-		filesystem = billy.NewBaseOSFS()
-	}
-
-	// Read file using filesystem abstraction
-	content, err := filesystem.ReadFile(path)
+	// Use the AST parser's ParseVersionOpts function for lightweight parsing
+	version, err := ast.ParseVersionOpts(ast.FromReader(reader))
 	if err != nil {
-		return "", fmt.Errorf("failed to read %s: %w", path, err)
+		return "", fmt.Errorf("failed to parse version: %w", err)
 	}
 
-	// Parse VERSION from content manually using scanner for efficiency
-	scanner := bufio.NewScanner(bytes.NewReader(content))
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		trimmed := bytes.TrimSpace(line)
-
-		// Skip empty lines and comments
-		if len(trimmed) == 0 || bytes.HasPrefix(trimmed, []byte("#")) {
-			continue
-		}
-
-		// Check if this is a VERSION command
-		if bytes.HasPrefix(trimmed, []byte("VERSION")) {
-			// Extract version number (last token after VERSION)
-			parts := bytes.Fields(trimmed)
-			if len(parts) >= 2 {
-				return string(parts[len(parts)-1]), nil
-			}
-		}
-
-		// Stop after first non-comment, non-empty line that isn't VERSION
-		// VERSION must be the first non-comment statement in an Earthfile
-		break
+	// If no version found, return empty string
+	if version == nil {
+		return "", nil
 	}
 
-	if err := scanner.Err(); err != nil {
-		return "", fmt.Errorf("error scanning file: %w", err)
+	// Extract the version number from the Version struct
+	// The version is typically the last argument
+	if len(version.Args) > 0 {
+		return version.Args[len(version.Args)-1], nil
 	}
 
 	return "", nil

@@ -9,8 +9,9 @@ type Earthfile struct {
 	functions map[string]*Function
 
 	// Cached computed properties
-	dependencies []Dependency // Lazy-loaded
-	version      string       // Cached from AST
+	dependencies       []Dependency // Lazy-loaded
+	dependenciesLoaded bool         // Track if dependencies have been parsed
+	version            string       // Cached from AST
 
 	// Raw commands before any target
 	baseCommands []*Command
@@ -27,11 +28,6 @@ func (ef *Earthfile) BaseCommands() []*Command {
 // AST returns the underlying AST for advanced operations.
 func (ef *Earthfile) AST() *spec.Earthfile {
 	return ef.ast
-}
-
-// Dependencies returns the list of dependencies (lazy-loaded).
-func (ef *Earthfile) Dependencies() []Dependency {
-	return ef.dependencies
 }
 
 // Target represents a build target with associated commands and metadata.

@@ -286,14 +286,16 @@ func TestEarthfile_AST_Already_Defined(t *testing.T) {
 }
 
 func TestEarthfile_Dependencies_Already_Defined(t *testing.T) {
-	// Dependencies() is already implemented in types.go
+	// Dependencies() now implements lazy loading from AST
+	// Test that pre-populated dependencies are returned correctly
 	deps := []Dependency{
-		{Target: "./lib:build", Local: true, Source: "build"},
-		{Target: "github.com/example/repo:test", Local: false, Source: "test"},
+		{Target: "./lib+build", Local: true, Source: "build"},
+		{Target: "github.com/example/repo+test", Local: false, Source: "test"},
 	}
 
 	ef := &Earthfile{
-		dependencies: deps,
+		dependencies:       deps,
+		dependenciesLoaded: true, // Mark as already loaded to bypass parsing
 	}
 
 	got := ef.Dependencies()
