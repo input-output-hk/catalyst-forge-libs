@@ -1,132 +1,143 @@
+# Validate against the v2 schema (recommended by docs)
+# https://golangci-lint.run/docs/configuration/file/
 version: "2"
 
-run:
-  relative-path-mode: gomod # resolve globs relative to module root
-  modules-download-mode: readonly # fail CI if go.mod/go.sum would change
-  allow-parallel-runners: true
-  tests: true
-
-# Code formatters run by `golangci-lint fmt` (and honored by `run --fix`).
+# --- Formatters (new in v2): checked during `run`, fixable with `--fix` or via `golangci-lint fmt`
+# https://golangci-lint.run/docs/formatters/  https://golangci-lint.run/docs/formatters/configuration/
 formatters:
-  enable:
-    - gofumpt
-    - gci
-    - golines
   settings:
     gofumpt:
-      extra-rules: true # stricter gofmt
-    gci: # deterministic, team-friendly imports
-      custom-order: true
-      sections: # std → 3rd party → local module
+      module-path: github.com/yourorg/yourrepo
+      extra-rules: true
+    gci:
+      sections:
         - standard
         - default
+        - prefix(github.com/yourorg/yourrepo)
+        - blank
+        - alias
         - localmodule
       no-inline-comments: true
       no-prefix-comments: true
-    golines:
-      max-len: 120 # wrap long lines nicely
-      shorten-comments: true
+      custom-order: true
 
+# --- Linters
+# Linters list & settings live here: https://golangci-lint.run/docs/linters/ and /docs/linters/configuration/
 linters:
-  # Start from the curated default set, then add high-signal extras.
+  # Start from the standard set, then enable a curated group that maps to your guide.
   default: standard
   enable:
-    # correctness & fundamentals
-    - staticcheck # includes gosimple/stylecheck set
-    - govet
-    - errcheck
-    - errorlint
-    - wrapcheck
-    - revive
+    # errors
+    - errcheck # no unchecked errors
+    - errorlint # require %w, errors.Is/As
+    - wrapcheck # ensure external errors are wrapped (configured below)
+    # contexts
+    - containedctx # forbid storing context in structs
+    - contextcheck # forbid non-inherited contexts
+    - noctx # require context-aware calls when available
+    - fatcontext # catch heavy values in context
+    # logging / stdlib updates
+    - sloglint # enforce consistent log/slog usage
+    # api & allocation hygiene
+    - staticcheck # high-signal checks
+    - govet # vet checks
     - ineffassign
-    - copyloopvar # catches range variable pitfalls
-    # API & style hygiene
-    - gocritic
-    - goconst
-    - ireturn # accept interfaces, return concrete
-    - usestdlibvars
-    - exptostd # prefer stdlib over x/exp
-    - unconvert
-    # complexity (kept reasonable)
+    - unused
+    - unparam
+    - forcetypeassert
+    - rowserrcheck
+    - sqlclosecheck
+    - bodyclose
+    # packages/imports
+    - depguard # allow/deny lists (configured below)
+    - importas # enforce canonical import aliases
+    # complexity & readability (tuned)
+    - gocyclo
     - cyclop
     - funlen
     - nestif
-    # I/O / DB safety
-    - bodyclose
-    - rowserrcheck
-    - sqlclosecheck
-    - errchkjson
-    # logging consistency (no effect if you don’t use slog)
-    - sloglint
-
+    - dupword
+    - misspell
+    - gofmt # ensures formatting (also covered by formatters, stays as a guard)
+    - godot # sentence-ending periods in comments
+    - revive # light style rules (defaults)
   settings:
-    govet:
-      enable: [shadow] # var shadowing is a common footgun
-    nolintlint:
-      require-explanation: true
-      require-specific: true
-      allow-unused: false
-    gocritic:
-      enabled-tags: [diagnostic, performance, style]
-      disabled-tags: [experimental, opinionated]
-    cyclop:
-      max-complexity: 15
-    funlen:
-      lines: 120
-      statements: 60
-      ignore-comments: true
-    revive: # lean "recommended" core
-      severity: warning
-      rules:
-        - name: context-as-argument
-        - name: context-keys-type
-        - name: error-return
-        - name: error-strings
-        - name: error-naming
-        - name: exported
-        - name: indent-error-flow
-        - name: var-naming
-        - name: var-declaration
-        - name: package-comments
-        - name: range
-        - name: receiver-naming
-        - name: time-naming
-        - name: unexported-return
-        - name: empty-block
-        - name: superfluous-else
-        - name: errorf
-        - name: increment-decrement
-        - name: unreachable-code
-    depguard: # block obviously-bad imports
+    # Error wrapping: allow common non-wrapping return sites to avoid noise (tweak as your codebase needs)
+    # See: https://golangci-lint.run/docs/linters/configuration/#wrapcheck
+    wrapcheck:
+      # Extend, don't replace, the default ignore list.
+      extra-ignore-sigs:
+        - .Error() error
+    # Import policy: prefer slog over legacy log; forbid direct std log usage in app code
+    # See: https://golangci-lint.run/docs/linters/configuration/#depguard
+    depguard:
       rules:
         main:
           list-mode: strict
-          allow: [$gostd]
+          files:
+            - $all
+          allow:
+            - $gostd
+            - github.com/yourorg/yourrepo
+            - log/slog$ # allow slog usage
           deny:
-            - pkg: "io/ioutil$" # deprecated; use io/os
-              desc: "Use io and os; ioutil is deprecated."
-            - pkg: "github.com/pkg/errors" # prefer %w and stdlib errors
-              desc: "Use Go 1.13+ errors with %w."
-            - pkg: "math/rand$" # prefer v2 in new code
-              desc: "Use math/rand/v2 in new code."
+            - pkg: "log$" # forbid legacy std log
+              desc: "Use log/slog instead of log"
+    # Complexity thresholds (kept reasonable to reduce false positives)
+    gocyclo:
+      min-complexity: 15
+    cyclop:
+      max-complexity: 15
+      package-average: 0.0
+    funlen:
+      lines: 120
+      statements: 60
 
-  # Trim unavoidable noise while staying strict elsewhere.
-  exclusions:
-    presets:
-      - std-error-handling
-      - common-false-positives
-    rules:
-      # Tests: keep signal high, avoid style/security noise
-      - path: "_test\\.go"
-        linters:
-          - bodyclose
-          - dupl
-          - funlen
-          - gocyclo
-          - goconst
-          - gosec
-          - noctx
-          - wrapcheck
+# --- Issues output & adoption knobs
+# https://golangci-lint.run/docs/configuration/file/#issues-configuration
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  new: true # only report new issues (keeps adoption sane in large repos)
+  new-from-merge-base: main
 
+# --- Output options (handy for CI)
+# https://golangci-lint.run/docs/configuration/file/#output-configuration
 output:
-  sort-order: [severity, file]
+  sort-order:
+    - linter
+    - severity
+    - file
+  show-stats: true
+
+# --- Runner behavior
+# https://golangci-lint.run/docs/configuration/file/#run-configuration  https://golangci-lint.run/docs/configuration/cli/
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+  relative-path-mode: gomod
+  allow-parallel-runners: true
+  concurrency: 0 # auto
+
+# --- Severity mapping (optional)
+# https://golangci-lint.run/docs/configuration/file/#severity-configuration
+severity:
+  default: error
+  rules:
+    - linters:
+        [
+          errcheck,
+          errorlint,
+          wrapcheck,
+          staticcheck,
+          govet,
+          containedctx,
+          contextcheck,
+          noctx,
+          sloglint,
+          depguard,
+        ]
+      severity: error
+    - linters: [gocyclo, cyclop, funlen, nestif, dupword, misspell, revive]
+      severity: warning
