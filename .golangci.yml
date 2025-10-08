@@ -7,13 +7,13 @@ version: "2"
 formatters:
   settings:
     gofumpt:
-      module-path: github.com/yourorg/yourrepo
+      module-path: github.com/input-output-hk/catalyst-forge-libs
       extra-rules: true
     gci:
       sections:
         - standard
         - default
-        - prefix(github.com/yourorg/yourrepo)
+        - prefix(github.com/input-output-hk/catalyst-forge-libs)
         - blank
         - alias
         - localmodule
@@ -58,7 +58,6 @@ linters:
     - nestif
     - dupword
     - misspell
-    - gofmt # ensures formatting (also covered by formatters, stays as a guard)
     - godot # sentence-ending periods in comments
     - revive # light style rules (defaults)
   settings:
@@ -76,9 +75,22 @@ linters:
           list-mode: strict
           files:
             - $all
+            - "!$test"
           allow:
             - $gostd
-            - github.com/yourorg/yourrepo
+            - github.com/input-output-hk/catalyst-forge-libs
+            - log/slog$ # allow slog usage
+          deny:
+            - pkg: "log$" # forbid legacy std log
+              desc: "Use log/slog instead of log"
+        test:
+          list-mode: strict
+          files:
+            - "$test"
+          allow:
+            - $gostd
+            - github.com/input-output-hk/catalyst-forge-libs
+            - github.com/stretchr/testify
             - log/slog$ # allow slog usage
           deny:
             - pkg: "log$" # forbid legacy std log
