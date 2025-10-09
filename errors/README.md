@@ -49,13 +49,15 @@ json.NewEncoder(w).Encode(response)
 
 ### Error Codes
 
-19 predefined error codes covering all platform scenarios:
+25 predefined error codes covering all platform scenarios:
 
 - Resource: `CodeNotFound`, `CodeAlreadyExists`, `CodeConflict`
 - Permission: `CodeUnauthorized`, `CodeForbidden`
 - Validation: `CodeInvalidInput`, `CodeInvalidConfig`, `CodeSchemaFailed`
 - Infrastructure: `CodeDatabase`, `CodeNetwork`, `CodeTimeout`, `CodeRateLimit`
 - Execution: `CodeExecutionFailed`, `CodeBuildFailed`, `CodePublishFailed`
+- CUE: `CodeCUELoadFailed`, `CodeCUEBuildFailed`, `CodeCUEValidationFailed`, `CodeCUEDecodeFailed`, `CodeCUEEncodeFailed`
+- Schema: `CodeSchemaVersionIncompatible`
 - System: `CodeInternal`, `CodeNotImplemented`, `CodeUnavailable`
 - Generic: `CodeUnknown`
 

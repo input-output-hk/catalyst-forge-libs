@@ -46,6 +46,16 @@ var defaultClassifications = map[ErrorCode]ErrorClassification{
 	CodeBuildFailed:     ClassificationPermanent,
 	CodePublishFailed:   ClassificationPermanent,
 
+	// CUE errors (permanent - user configuration issues)
+	CodeCUELoadFailed:       ClassificationPermanent,
+	CodeCUEBuildFailed:      ClassificationPermanent,
+	CodeCUEValidationFailed: ClassificationPermanent,
+	CodeCUEDecodeFailed:     ClassificationPermanent,
+	CodeCUEEncodeFailed:     ClassificationPermanent,
+
+	// Schema errors (permanent - version incompatibility)
+	CodeSchemaVersionIncompatible: ClassificationPermanent,
+
 	// System errors (often permanent, but may be transient)
 	CodeInternal: ClassificationPermanent,
 	CodeUnknown:  ClassificationPermanent,

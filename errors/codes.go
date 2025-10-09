@@ -63,6 +63,29 @@ const (
 	// CodePublishFailed indicates a publish operation failed.
 	CodePublishFailed ErrorCode = "PUBLISH_FAILED"
 
+	// CUE errors.
+
+	// CodeCUELoadFailed indicates CUE file/module loading failed.
+	CodeCUELoadFailed ErrorCode = "CUE_LOAD_FAILED"
+
+	// CodeCUEBuildFailed indicates CUE build/evaluation failed.
+	CodeCUEBuildFailed ErrorCode = "CUE_BUILD_FAILED"
+
+	// CodeCUEValidationFailed indicates CUE validation failed.
+	CodeCUEValidationFailed ErrorCode = "CUE_VALIDATION_FAILED"
+
+	// CodeCUEDecodeFailed indicates CUE to Go struct decoding failed.
+	CodeCUEDecodeFailed ErrorCode = "CUE_DECODE_FAILED"
+
+	// CodeCUEEncodeFailed indicates CUE to YAML/JSON encoding failed.
+	CodeCUEEncodeFailed ErrorCode = "CUE_ENCODE_FAILED"
+
+	// Schema errors.
+
+	// CodeSchemaVersionIncompatible indicates incompatible major schema version.
+	// Config major version does not match supported schema major version.
+	CodeSchemaVersionIncompatible ErrorCode = "SCHEMA_VERSION_INCOMPATIBLE"
+
 	// System errors.
 
 	// CodeInternal indicates an internal system error occurred.
