@@ -10,12 +10,16 @@ import (
 // This publisher pushes container images to a Docker registry.
 // Discriminated by type!: "docker".
 type DockerPublisher struct {
+	// Required literal tag for discriminated union
 	Type string `json:"type"`
 
+	// Docker registry URL (e.g., "docker.io", "ghcr.io")
 	Registry string `json:"registry"`
 
+	// Registry namespace (e.g., "myorg", "username")
 	Namespace string `json:"namespace"`
 
+	// Optional credentials for registry authentication
 	Credentials *common.SecretRef `json:"credentials,omitempty"`
 }
 
@@ -23,10 +27,13 @@ type DockerPublisher struct {
 // This publisher publishes artifacts to GitHub Releases.
 // Discriminated by type!: "github".
 type GitHubPublisher struct {
+	// Required literal tag for discriminated union
 	Type string `json:"type"`
 
+	// GitHub repository (e.g., "owner/repo")
 	Repository string `json:"repository"`
 
+	// Optional credentials for GitHub authentication
 	Credentials *common.SecretRef `json:"credentials,omitempty"`
 }
 
@@ -39,11 +46,15 @@ type PublisherConfig map[string]any
 // This publisher uploads artifacts to an S3 bucket.
 // Discriminated by type!: "s3".
 type S3Publisher struct {
+	// Required literal tag for discriminated union
 	Type string `json:"type"`
 
+	// S3 bucket name
 	Bucket string `json:"bucket"`
 
+	// AWS region (optional, uses default if not specified)
 	Region string `json:"region,omitempty"`
 
+	// Optional credentials for S3 authentication
 	Credentials *common.SecretRef `json:"credentials,omitempty"`
 }

@@ -5,33 +5,43 @@ package schema
 // ProjectConfig defines project-level configuration for Catalyst Forge.
 // This is the configuration for an individual project within a repository.
 type ProjectConfig struct {
+	// Project name
 	Name string `json:"name"`
 
+	// Map of phase names to phase participation
 	Phases map[string]PhaseParticipation `json:"phases"`
 
+	// Map of artifact names to artifact specifications
 	Artifacts struct {
 	} `json:"artifacts"`
 
+	// Optional release configuration
 	Release *ReleaseConfig `json:"release,omitempty"`
 
+	// Optional deployment configuration
 	Deploy *DeploymentConfig `json:"deploy,omitempty"`
 }
 
 // PhaseParticipation defines how a project participates in a specific phase.
 // Contains the steps to execute during that phase.
 type PhaseParticipation struct {
+	// List of steps to execute in this phase
 	Steps []Step `json:"steps"`
 }
 
 // EarthlyStep defines a step that executes an Earthly target.
 // Discriminated by action!: "earthly".
 type EarthlyStep struct {
+	// Step name
 	Name string `json:"name"`
 
+	// Required literal tag for discriminated union
 	Action string `json:"action"`
 
+	// Earthly target to execute (e.g., "+test")
 	Target string `json:"target"`
 
+	// Optional timeout (e.g., "30m", "1h")
 	Timeout string `json:"timeout,omitempty"`
 }
 
@@ -42,51 +52,65 @@ type Step EarthlyStep
 
 // ReleaseConfig defines when and how releases should be triggered.
 type ReleaseConfig struct {
+	// List of conditions that trigger a release
 	On []ReleaseTrigger `json:"on"`
 }
 
 // ReleaseTrigger defines a condition that triggers a release.
 // At least one field should be specified.
 type ReleaseTrigger struct {
+	// Branch name or regex pattern that triggers release
 	Branch string `json:"branch,omitempty"`
 
+	// Trigger on any git tag
 	Tag bool `json:"tag,omitempty"`
 
+	// Allow manual trigger only
 	Manual bool `json:"manual,omitempty"`
 }
 
 // DeploymentConfig defines Kubernetes resources to deploy.
 type DeploymentConfig struct {
+	// List of Kubernetes resources to deploy
 	Resources []K8sResource `json:"resources"`
 }
 
 // K8sResource defines a Kubernetes resource manifest.
 // Uses flexible map structure for metadata and spec to support any K8s resource type.
 type K8sResource struct {
+	// Kubernetes API version (e.g., "apps/v1")
 	ApiVersion string `json:"apiVersion"`
 
+	// Kubernetes resource kind (e.g., "Deployment", "Service")
 	Kind string `json:"kind"`
 
+	// Kubernetes metadata (flexible map)
 	Metadata map[string]any/* CUE top */ `json:"metadata"`
 
+	// Kubernetes spec (flexible map)
 	Spec map[string]any/* CUE top */ `json:"spec"`
 }
 
 // RepoConfig defines repository-level configuration for Catalyst Forge.
 // This is the root configuration for an entire repository.
 type RepoConfig struct {
+	// Schema version for compatibility checks (e.g., "0.1.0")
 	ForgeVersion string `json:"forgeVersion"`
 
+	// Git tagging strategy
 	Tagging TaggingStrategy `json:"tagging"`
 
+	// Map of phase names to phase definitions
 	Phases struct {
 	} `json:"phases"`
 
+	// Map of publisher names to publisher configurations
 	Publishers struct {
 	} `json:"publishers"`
 }
 
 // TaggingStrategy defines how git tags should be applied in the repository.
 type TaggingStrategy struct {
+	// "monorepo": tags per project, "tag-all": single tag for repo
 	Strategy string `json:"strategy"`
 }

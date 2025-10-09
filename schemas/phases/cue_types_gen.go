@@ -6,11 +6,15 @@ package phases
 // Phases with the same group number execute in parallel.
 // Groups are executed sequentially in ascending order.
 type PhaseDefinition struct {
+	// Execution group number (phases in same group run in parallel)
 	Group int64 `json:"group"`
 
+	// Optional description of phase purpose
 	Description string `json:"description,omitempty"`
 
+	// Optional timeout (e.g., "30m", "1h")
 	Timeout string `json:"timeout,omitempty"`
 
+	// Whether phase is required (default: false)
 	Required bool `json:"required,omitempty"`
 }

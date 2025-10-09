@@ -6,12 +6,16 @@ package artifacts
 // This artifact type represents a container image that can be pushed to registries.
 // Discriminated by type!: "container".
 type ContainerArtifact struct {
+	// Required literal tag for discriminated union
 	Type string `json:"type"`
 
+	// Container image reference (e.g., "myapp:v1.0.0")
 	Ref string `json:"ref"`
 
+	// Producer that builds this artifact
 	Producer ArtifactProducer `json:"producer"`
 
+	// References to publisher names from repo.cue
 	Publishers []string `json:"publishers"`
 }
 
@@ -19,12 +23,16 @@ type ContainerArtifact struct {
 // This artifact type represents a standalone binary executable.
 // Discriminated by type!: "binary".
 type BinaryArtifact struct {
+	// Required literal tag for discriminated union
 	Type string `json:"type"`
 
+	// Name of the binary (as produced by producer)
 	Name string `json:"name"`
 
+	// Producer that builds this artifact
 	Producer ArtifactProducer `json:"producer"`
 
+	// References to publisher names from repo.cue
 	Publishers []string `json:"publishers"`
 }
 
@@ -32,12 +40,16 @@ type BinaryArtifact struct {
 // This artifact type represents a compressed archive file.
 // Discriminated by type!: "archive".
 type ArchiveArtifact struct {
+	// Required literal tag for discriminated union
 	Type string `json:"type"`
 
+	// Compression format (default: gzip)
 	Compression string `json:"compression"`
 
+	// Producer that builds this artifact
 	Producer ArtifactProducer `json:"producer"`
 
+	// References to publisher names from repo.cue
 	Publishers []string `json:"publishers"`
 }
 
@@ -50,10 +62,13 @@ type ArtifactSpec map[string]any
 // This producer uses Earthly targets to build artifacts.
 // Discriminated by type!: "earthly".
 type EarthlyProducer struct {
+	// Required literal tag for discriminated union
 	Type string `json:"type"`
 
+	// Earthly target to build (e.g., "+build")
 	Target string `json:"target"`
 
+	// Artifact output reference (e.g., "+build/output")
 	Artifact string `json:"artifact,omitempty"`
 }
 

@@ -4,9 +4,12 @@ package artifacts
 // This producer uses Earthly targets to build artifacts.
 // Discriminated by type!: "earthly".
 #EarthlyProducer: {
-	type!:     "earthly" // Required literal tag for discriminated union
-	target:    string    // Earthly target to build (e.g., "+build")
-	artifact?: string    // Artifact output reference (e.g., "+build/output")
+	// Required literal tag for discriminated union
+	type!: "earthly"
+	// Earthly target to build (e.g., "+build")
+	target: string
+	// Artifact output reference (e.g., "+build/output")
+	artifact?: string
 }
 
 // ArtifactProducer is a discriminated union of all producer types.

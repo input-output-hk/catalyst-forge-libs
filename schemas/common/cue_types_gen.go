@@ -7,10 +7,13 @@ package common
 type AWSSecretRef struct {
 	Provider string `json:"provider"`
 
+	// ARN or name of secret in AWS Secrets Manager
 	Name string `json:"name"`
 
+	// Optional key within secret
 	Key string `json:"key,omitempty"`
 
+	// AWS region (optional, uses default if not specified)
 	Region string `json:"region,omitempty"`
 }
 
@@ -19,8 +22,10 @@ type AWSSecretRef struct {
 type VaultSecretRef struct {
 	Provider string `json:"provider"`
 
+	// Path to secret in Vault (e.g., "secret/data/myapp/api-key")
 	Path string `json:"path"`
 
+	// Optional key within secret (for KV v2)
 	Key string `json:"key,omitempty"`
 }
 

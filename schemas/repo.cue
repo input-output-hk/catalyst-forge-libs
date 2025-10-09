@@ -12,13 +12,18 @@ _usePublishers: publishers.#PublisherConfig
 // RepoConfig defines repository-level configuration for Catalyst Forge.
 // This is the root configuration for an entire repository.
 #RepoConfig: {
-	forgeVersion: string           // Schema version for compatibility checks (e.g., "0.1.0")
-	tagging:      #TaggingStrategy // Git tagging strategy
-	phases: [string]:     phases.#PhaseDefinition       // Map of phase names to phase definitions
-	publishers: [string]: publishers.#PublisherConfig // Map of publisher names to publisher configurations
+	// Schema version for compatibility checks (e.g., "0.1.0")
+	forgeVersion: string
+	// Git tagging strategy
+	tagging: #TaggingStrategy
+	// Map of phase names to phase definitions
+	phases: [string]: phases.#PhaseDefinition
+	// Map of publisher names to publisher configurations
+	publishers: [string]: publishers.#PublisherConfig
 }
 
 // TaggingStrategy defines how git tags should be applied in the repository.
 #TaggingStrategy: {
-	strategy: "monorepo" | "tag-all" // "monorepo": tags per project, "tag-all": single tag for repo
+	// "monorepo": tags per project, "tag-all": single tag for repo
+	strategy: "monorepo" | "tag-all"
 }

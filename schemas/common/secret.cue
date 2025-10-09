@@ -4,17 +4,22 @@ package common
 // Discriminated by provider!: "aws".
 #AWSSecretRef: {
 	provider!: "aws"
-	name:      string // ARN or name of secret in AWS Secrets Manager
-	key?:      string // Optional key within secret
-	region?:   string // AWS region (optional, uses default if not specified)
+	// ARN or name of secret in AWS Secrets Manager
+	name: string
+	// Optional key within secret
+	key?: string
+	// AWS region (optional, uses default if not specified)
+	region?: string
 }
 
 // VaultSecretRef references a secret stored in HashiCorp Vault.
 // Discriminated by provider!: "vault".
 #VaultSecretRef: {
 	provider!: "vault"
-	path:      string // Path to secret in Vault (e.g., "secret/data/myapp/api-key")
-	key?:      string // Optional key within secret (for KV v2)
+	// Path to secret in Vault (e.g., "secret/data/myapp/api-key")
+	path: string
+	// Optional key within secret (for KV v2)
+	key?: string
 }
 
 // SecretRef is a universal secret reference that can point to secrets

@@ -4,30 +4,42 @@ package artifacts
 // This artifact type represents a container image that can be pushed to registries.
 // Discriminated by type!: "container".
 #ContainerArtifact: {
-	type!:    "container"       // Required literal tag for discriminated union
-	ref:      string            // Container image reference (e.g., "myapp:v1.0.0")
-	producer: #ArtifactProducer // Producer that builds this artifact
-	publishers: [...string] // References to publisher names from repo.cue
+	// Required literal tag for discriminated union
+	type!: "container"
+	// Container image reference (e.g., "myapp:v1.0.0")
+	ref: string
+	// Producer that builds this artifact
+	producer: #ArtifactProducer
+	// References to publisher names from repo.cue
+	publishers: [...string]
 }
 
 // BinaryArtifact defines a binary executable artifact.
 // This artifact type represents a standalone binary executable.
 // Discriminated by type!: "binary".
 #BinaryArtifact: {
-	type!:    "binary"          // Required literal tag for discriminated union
-	name:     string            // Name of the binary (as produced by producer)
-	producer: #ArtifactProducer // Producer that builds this artifact
-	publishers: [...string] // References to publisher names from repo.cue
+	// Required literal tag for discriminated union
+	type!: "binary"
+	// Name of the binary (as produced by producer)
+	name: string
+	// Producer that builds this artifact
+	producer: #ArtifactProducer
+	// References to publisher names from repo.cue
+	publishers: [...string]
 }
 
 // ArchiveArtifact defines an archive artifact.
 // This artifact type represents a compressed archive file.
 // Discriminated by type!: "archive".
 #ArchiveArtifact: {
-	type!:       "archive"         // Required literal tag for discriminated union
-	compression: *"gzip" | "zip"   // Compression format (default: gzip)
-	producer:    #ArtifactProducer // Producer that builds this artifact
-	publishers: [...string] // References to publisher names from repo.cue
+	// Required literal tag for discriminated union
+	type!: "archive"
+	// Compression format (default: gzip)
+	compression: *"gzip" | "zip"
+	// Producer that builds this artifact
+	producer: #ArtifactProducer
+	// References to publisher names from repo.cue
+	publishers: [...string]
 }
 
 // ArtifactSpec is a discriminated union of all artifact types.
