@@ -79,6 +79,7 @@ linters:
           allow:
             - $gostd
             - github.com/input-output-hk/catalyst-forge-libs
+            - github.com/Masterminds/semver/v3 # semantic versioning library
             - log/slog$ # allow slog usage
           deny:
             - pkg: "log$" # forbid legacy std log
@@ -90,6 +91,7 @@ linters:
           allow:
             - $gostd
             - github.com/input-output-hk/catalyst-forge-libs
+            - github.com/Masterminds/semver/v3 # semantic versioning library
             - github.com/stretchr/testify
             - log/slog$ # allow slog usage
           deny:
