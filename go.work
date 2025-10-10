@@ -1,0 +1,11 @@
+go 1.24.2
+
+use (
+	./cue
+	./domain
+	./errors
+	./fs/billy
+	./fs/core
+	./fs/fstest
+	./schemas
+)
