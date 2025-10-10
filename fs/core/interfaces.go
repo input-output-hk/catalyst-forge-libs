@@ -49,6 +49,16 @@ type ReadFS interface {
 	// Because ReadFile reads the whole file, it does not treat EOF
 	// as an error to be reported.
 	ReadFile(name string) ([]byte, error)
+
+	// Exists reports whether the named file or directory exists.
+	// It returns true if the path exists, false if it does not exist.
+	// If an error occurs while checking (e.g., permission denied),
+	// it returns false and the error.
+	//
+	// Note: For most use cases, callers should check the error.
+	// A false result with a non-nil error indicates the existence
+	// could not be determined, not that the file doesn't exist.
+	Exists(name string) (bool, error)
 }
 
 // WriteFS defines write operations.

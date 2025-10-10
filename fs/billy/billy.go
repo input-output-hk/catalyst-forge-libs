@@ -123,6 +123,19 @@ func (lfs *LocalFS) ReadFile(name string) ([]byte, error) {
 	return io.ReadAll(f)
 }
 
+// Exists reports whether the named file or directory exists.
+func (lfs *LocalFS) Exists(name string) (bool, error) {
+	name = normalize(name)
+	_, err := lfs.bfs.Stat(name)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
+}
+
 // LocalFS WriteFS interface implementation
 
 // Create creates or truncates the named file for writing.
@@ -331,6 +344,19 @@ func (mfs *MemoryFS) ReadFile(name string) ([]byte, error) {
 	}
 	defer func() { _ = f.Close() }()
 	return io.ReadAll(f)
+}
+
+// Exists reports whether the named file or directory exists.
+func (mfs *MemoryFS) Exists(name string) (bool, error) {
+	name = normalize(name)
+	_, err := mfs.bfs.Stat(name)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
 }
 
 // MemoryFS WriteFS interface implementation

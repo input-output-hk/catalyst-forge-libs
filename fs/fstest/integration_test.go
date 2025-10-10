@@ -305,6 +305,18 @@ func (f *osFS) ReadFile(name string) ([]byte, error) {
 	return os.ReadFile(f.resolve(name))
 }
 
+func (f *osFS) Exists(name string) (bool, error) {
+	_, err := os.Stat(f.resolve(name))
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	//nolint:wrapcheck // Test helper - must pass through os errors unchanged for error detection
+	return false, err
+}
+
 // WriteFS methods.
 func (f *osFS) Create(name string) (core.File, error) {
 	//nolint:wrapcheck // Test helper - must pass through os errors unchanged for error detection

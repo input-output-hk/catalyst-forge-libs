@@ -44,6 +44,15 @@ func TestReadFS(t *testing.T, filesystem core.FS) {
 	t.Run("OpenNotExist", func(t *testing.T) {
 		testReadFSOpenNotExist(t, filesystem)
 	})
+	t.Run("ExistsFile", func(t *testing.T) {
+		testReadFSExistsFile(t, filesystem)
+	})
+	t.Run("ExistsDir", func(t *testing.T) {
+		testReadFSExistsDir(t, filesystem)
+	})
+	t.Run("ExistsNotExist", func(t *testing.T) {
+		testReadFSExistsNotExist(t, filesystem)
+	})
 }
 
 // testReadFSOpen tests Open() on existing file and reads contents.
@@ -137,5 +146,41 @@ func testReadFSOpenNotExist(t *testing.T, filesystem core.FS) {
 	_, err := filesystem.Open("nonexistent")
 	if !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("Open(%q): got error %v, want fs.ErrNotExist", "nonexistent", err)
+	}
+}
+
+// testReadFSExistsFile tests Exists() returns true for existing file.
+func testReadFSExistsFile(t *testing.T, filesystem core.FS) {
+	exists, err := filesystem.Exists("testdir/testfile.txt")
+	if err != nil {
+		t.Errorf("Exists(%q): got error %v, want nil", "testdir/testfile.txt", err)
+		return
+	}
+	if !exists {
+		t.Errorf("Exists(%q): got false, want true", "testdir/testfile.txt")
+	}
+}
+
+// testReadFSExistsDir tests Exists() returns true for existing directory.
+func testReadFSExistsDir(t *testing.T, filesystem core.FS) {
+	exists, err := filesystem.Exists("testdir")
+	if err != nil {
+		t.Errorf("Exists(%q): got error %v, want nil", "testdir", err)
+		return
+	}
+	if !exists {
+		t.Errorf("Exists(%q): got false, want true", "testdir")
+	}
+}
+
+// testReadFSExistsNotExist tests Exists() returns false for non-existent path.
+func testReadFSExistsNotExist(t *testing.T, filesystem core.FS) {
+	exists, err := filesystem.Exists("nonexistent")
+	if err != nil {
+		t.Errorf("Exists(%q): got error %v, want nil", "nonexistent", err)
+		return
+	}
+	if exists {
+		t.Errorf("Exists(%q): got true, want false", "nonexistent")
 	}
 }

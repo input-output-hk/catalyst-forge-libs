@@ -38,11 +38,12 @@ func Example_interfaceComposition() {
 
 // Example_readOperationsSignature demonstrates the ReadFS interface signature.
 func Example_readOperationsSignature() {
-	// ReadFS defines four read-only operations:
+	// ReadFS defines five read-only operations:
 	// - Open(name string) (fs.File, error)
 	// - Stat(name string) (fs.FileInfo, error)
 	// - ReadDir(name string) ([]fs.DirEntry, error)
 	// - ReadFile(name string) ([]byte, error)
+	// - Exists(name string) (bool, error)
 
 	fmt.Println("ReadFS provides read-only operations")
 	// Output: ReadFS provides read-only operations
@@ -198,6 +199,41 @@ func Example_errorHandling() {
 	// Output: Use standard error types for consistent error handling
 }
 
+// Example_existsUsage demonstrates how to use the Exists method.
+func Example_existsUsage() {
+	// The Exists method checks if a file or directory exists:
+	//
+	// exists, err := filesystem.Exists("config.yaml")
+	// if err != nil {
+	//     // Error occurred while checking (e.g., permission denied)
+	//     return err
+	// }
+	// if !exists {
+	//     // File definitely doesn't exist
+	//     return fmt.Errorf("config file not found")
+	// }
+	//
+	// Important: Always check the error! A false result with an error
+	// means the existence could not be determined, not that the file
+	// doesn't exist.
+	//
+	// Common pattern for handling missing files:
+	// exists, err := filesystem.Exists("optional.txt")
+	// if err != nil {
+	//     return err
+	// }
+	// if exists {
+	//     // File exists, read it
+	//     data, _ := filesystem.ReadFile("optional.txt")
+	//     _ = data
+	// } else {
+	//     // File doesn't exist, use defaults
+	// }
+
+	fmt.Println("Exists checks if a file or directory exists")
+	// Output: Exists checks if a file or directory exists
+}
+
 // mockFS is a minimal implementation for testing interface satisfaction.
 type mockFS struct{}
 
@@ -205,6 +241,7 @@ func (m *mockFS) Open(_ string) (fs.File, error)          { return nil, nil }
 func (m *mockFS) Stat(_ string) (fs.FileInfo, error)      { return nil, nil }
 func (m *mockFS) ReadDir(_ string) ([]fs.DirEntry, error) { return nil, nil }
 func (m *mockFS) ReadFile(_ string) ([]byte, error)       { return nil, nil }
+func (m *mockFS) Exists(_ string) (bool, error)           { return false, nil }
 func (m *mockFS) Create(_ string) (core.File, error)      { return nil, nil }
 func (m *mockFS) OpenFile(_ string, _ int, _ fs.FileMode) (core.File, error) {
 	return nil, nil
