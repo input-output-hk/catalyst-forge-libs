@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/input-output-hk/catalyst-forge-libs/fs/core"
@@ -35,39 +36,6 @@ type File struct {
 	closed bool          // Prevent double-close
 }
 
-// newFileRead creates a File in read mode by downloading the object.
-func newFileRead(ctx context.Context, mfs *MinioFS, key, name string) (*File, error) {
-	// Download the object
-	obj, err := mfs.client.GetObject(ctx, mfs.bucket, key, minio.GetObjectOptions{})
-	if err != nil {
-		return nil, translateError(err)
-	}
-	defer func() {
-		_ = obj.Close()
-	}()
-
-	// Read the entire object into memory
-	data, err := io.ReadAll(obj)
-	if err != nil {
-		return nil, translateError(err)
-	}
-
-	// Get object info for metadata
-	stat, err := obj.Stat()
-	if err != nil {
-		return nil, translateError(err)
-	}
-
-	return &File{
-		fs:      mfs,
-		key:     key,
-		name:    name,
-		mode:    os.O_RDONLY,
-		reader:  bytes.NewReader(data),
-		size:    stat.Size,
-		modTime: stat.LastModified,
-	}, nil
-}
 
 // newFileWrite creates a File in write mode with an empty buffer.
 func newFileWrite(mfs *MinioFS, key, name string, flag int) *File {
@@ -227,6 +195,160 @@ func (fi *fileInfo) ModTime() time.Time { return fi.modTime }
 func (fi *fileInfo) IsDir() bool        { return fi.mode&fs.ModeDir != 0 }
 func (fi *fileInfo) Sys() interface{}   { return nil }
 
+// streamingFile provides streaming reads without buffering entire objects.
+// This type is used for read operations to minimize memory usage.
+type streamingFile struct {
+	fs     *MinioFS
+	key    string
+	name   string
+	obj    *minio.Object
+	info   minio.ObjectInfo
+	offset int64 // Current read position for Seek implementation
+	closed bool
+}
+
+// newStreamingFile creates a streaming file handle for reading.
+// It opens the object for streaming without downloading the entire content.
+func newStreamingFile(ctx context.Context, mfs *MinioFS, key, name string) (*streamingFile, error) {
+	obj, err := mfs.client.GetObject(ctx, mfs.bucket, key, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: translateError(err)}
+	}
+
+	// Get metadata from the GET response (no separate HEAD request)
+	info, err := obj.Stat()
+	if err != nil {
+		_ = obj.Close()
+		return nil, &fs.PathError{Op: "open", Path: name, Err: translateError(err)}
+	}
+
+	return &streamingFile{
+		fs:     mfs,
+		key:    key,
+		name:   name,
+		obj:    obj,
+		info:   info,
+		offset: 0,
+		closed: false,
+	}, nil
+}
+
+// Read reads up to len(p) bytes into p from the streaming object.
+func (f *streamingFile) Read(p []byte) (int, error) {
+	if f.closed {
+		return 0, &fs.PathError{Op: "read", Path: f.name, Err: fs.ErrClosed}
+	}
+	n, err := f.obj.Read(p)
+	f.offset += int64(n)
+	return n, err
+}
+
+// Close closes the streaming file and releases resources.
+func (f *streamingFile) Close() error {
+	if f.closed {
+		return nil
+	}
+	f.closed = true
+	return f.obj.Close()
+}
+
+// Stat returns file information for the streaming file.
+func (f *streamingFile) Stat() (fs.FileInfo, error) {
+	return &fileInfo{
+		name:    filepath.Base(f.name),
+		size:    f.info.Size,
+		modTime: f.info.LastModified,
+		mode:    0644,
+	}, nil
+}
+
+// Name returns the name of the file.
+func (f *streamingFile) Name() string {
+	return f.name
+}
+
+// Write is not supported for read-only streaming files.
+func (f *streamingFile) Write(_ []byte) (int, error) {
+	return 0, &fs.PathError{Op: "write", Path: f.name, Err: fs.ErrInvalid}
+}
+
+// Seek sets the read position for the next Read operation.
+// It reopens the object with a range request starting at the new offset.
+func (f *streamingFile) Seek(offset int64, whence int) (int64, error) {
+	if f.closed {
+		return 0, &fs.PathError{Op: "seek", Path: f.name, Err: fs.ErrClosed}
+	}
+
+	var newOffset int64
+	switch whence {
+	case io.SeekStart:
+		newOffset = offset
+	case io.SeekCurrent:
+		newOffset = f.offset + offset
+	case io.SeekEnd:
+		newOffset = f.info.Size + offset
+	default:
+		return 0, &fs.PathError{Op: "seek", Path: f.name, Err: fs.ErrInvalid}
+	}
+
+	if newOffset < 0 {
+		return 0, &fs.PathError{Op: "seek", Path: f.name, Err: fs.ErrInvalid}
+	}
+
+	// If seeking to current position, no need to reopen
+	if newOffset == f.offset {
+		return newOffset, nil
+	}
+
+	// Close current object
+	_ = f.obj.Close()
+
+	// Reopen with range starting at new offset
+	opts := minio.GetObjectOptions{}
+	if newOffset > 0 {
+		if err := opts.SetRange(newOffset, 0); err != nil {
+			return 0, &fs.PathError{Op: "seek", Path: f.name, Err: err}
+		}
+	}
+
+	obj, err := f.fs.client.GetObject(context.Background(), f.fs.bucket, f.key, opts)
+	if err != nil {
+		return 0, &fs.PathError{Op: "seek", Path: f.name, Err: translateError(err)}
+	}
+
+	f.obj = obj
+	f.offset = newOffset
+	return newOffset, nil
+}
+
+// ReadAt reads len(p) bytes from the file starting at byte offset off.
+// It uses HTTP range requests for efficient random access.
+func (f *streamingFile) ReadAt(p []byte, off int64) (int, error) {
+	if f.closed {
+		return 0, &fs.PathError{Op: "readat", Path: f.name, Err: fs.ErrClosed}
+	}
+
+	if off < 0 {
+		return 0, &fs.PathError{Op: "readat", Path: f.name, Err: fs.ErrInvalid}
+	}
+
+	// Use a dedicated range request for ReadAt (doesn't affect main stream position)
+	opts := minio.GetObjectOptions{}
+	if err := opts.SetRange(off, off+int64(len(p))-1); err != nil {
+		return 0, &fs.PathError{Op: "readat", Path: f.name, Err: err}
+	}
+
+	obj, err := f.fs.client.GetObject(context.Background(), f.fs.bucket, f.key, opts)
+	if err != nil {
+		return 0, &fs.PathError{Op: "readat", Path: f.name, Err: translateError(err)}
+	}
+	defer func() {
+		_ = obj.Close()
+	}()
+
+	return io.ReadFull(obj, p)
+}
+
 // Compile-time interface checks.
 var (
 	_ core.File   = (*File)(nil)
@@ -234,4 +356,9 @@ var (
 	_ io.Seeker   = (*File)(nil)
 	_ io.ReaderAt = (*File)(nil)
 	_ core.Syncer = (*File)(nil)
+
+	_ core.File   = (*streamingFile)(nil)
+	_ fs.File     = (*streamingFile)(nil)
+	_ io.Seeker   = (*streamingFile)(nil)
+	_ io.ReaderAt = (*streamingFile)(nil)
 )

@@ -8,12 +8,15 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/input-output-hk/catalyst-forge-libs/fs/core"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"golang.org/x/sync/errgroup"
 )
 
 // MinioFS implements core.FS for MinIO/S3-compatible storage.
@@ -22,10 +25,11 @@ import (
 //
 //nolint:revive // MinioFS name is intentional to match naming pattern across fs implementations
 type MinioFS struct {
-	client             *minio.Client
-	bucket             string
-	prefix             string // Optional prefix for all keys
-	multipartThreshold int64  // Threshold for multipart uploads
+	client              *minio.Client
+	bucket              string
+	prefix              string // Optional prefix for all keys
+	multipartThreshold  int64  // Threshold for multipart uploads
+	renameConcurrency   int    // Max concurrent operations for directory rename
 }
 
 // NewMinIO creates a MinIO-backed filesystem.
@@ -62,11 +66,18 @@ func NewMinIO(cfg Config) (*MinioFS, error) {
 		multipartThreshold = 5 * 1024 * 1024 // 5MB default
 	}
 
+	// Set default rename concurrency if not specified
+	renameConcurrency := cfg.MaxRenameConcurrency
+	if renameConcurrency == 0 {
+		renameConcurrency = 10 // Default to 10 concurrent operations
+	}
+
 	return &MinioFS{
 		client:             client,
 		bucket:             cfg.Bucket,
 		prefix:             prefix,
 		multipartThreshold: multipartThreshold,
+		renameConcurrency:  renameConcurrency,
 	}, nil
 }
 
@@ -168,9 +179,11 @@ func translateError(err error) error {
 // These will be implemented in subsequent tasks
 
 // Open opens the named file for reading.
+// Returns a streaming file that doesn't buffer the entire object in memory.
+// The returned file supports Seek and ReadAt via HTTP range requests.
 func (m *MinioFS) Open(name string) (fs.File, error) {
 	key := m.joinPath(name)
-	return newFileRead(context.Background(), m, key, name)
+	return newStreamingFile(context.Background(), m, key, name)
 }
 
 // Stat returns file information for the named file.
@@ -241,28 +254,43 @@ func (m *MinioFS) ReadDir(name string) ([]fs.DirEntry, error) {
 		})
 	}
 
-	// Sort entries by name
-	// Note: Go's fs.ReadDir contract requires sorting, but MinIO SDK returns
-	// results sorted by key already, so entries are already sorted
+	// Sort entries by name to enforce fs.ReadDir contract
+	// MinIO typically returns results sorted by key, but we enforce it for strict compliance
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Name() < entries[j].Name()
+	})
+
 	return entries, nil
 }
 
 // ReadFile reads the named file and returns the contents.
 func (m *MinioFS) ReadFile(name string) ([]byte, error) {
-	file, err := m.Open(name)
+	key := m.joinPath(name)
+	ctx := context.Background()
+
+	// Get size first to pre-allocate exact buffer size
+	info, err := m.client.StatObject(ctx, m.bucket, key, minio.StatObjectOptions{})
 	if err != nil {
-		return nil, err
+		return nil, &fs.PathError{Op: "readfile", Path: name, Err: translateError(err)}
+	}
+
+	// Stream object directly into pre-allocated buffer
+	obj, err := m.client.GetObject(ctx, m.bucket, key, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, &fs.PathError{Op: "readfile", Path: name, Err: translateError(err)}
 	}
 	defer func() {
-		_ = file.Close()
+		_ = obj.Close()
 	}()
 
-	data, err := io.ReadAll(file)
+	// Pre-allocate buffer with exact size for single allocation
+	buf := make([]byte, info.Size)
+	_, err = io.ReadFull(obj, buf)
 	if err != nil {
 		return nil, &fs.PathError{Op: "readfile", Path: name, Err: err}
 	}
 
-	return data, nil
+	return buf, nil
 }
 
 // Exists reports whether the named file or directory exists.
@@ -308,8 +336,8 @@ func (m *MinioFS) OpenFile(name string, flag int, _ fs.FileMode) (core.File, err
 		return newFileWrite(m, key, name, flag), nil
 	}
 
-	// Handle read mode (O_RDONLY or no flags)
-	return newFileRead(context.Background(), m, key, name)
+	// Handle read mode (O_RDONLY or no flags) - use streaming file
+	return newStreamingFile(context.Background(), m, key, name)
 }
 
 // WriteFile writes data to the named file.
@@ -375,36 +403,58 @@ func (m *MinioFS) RemoveAll(path string) error {
 		key = key + "/"
 	}
 
-	// List all objects with the prefix
-	objectsCh := make(chan minio.ObjectInfo)
+	// Create channel for objects to delete
+	objectsCh := make(chan minio.ObjectInfo, 100)
 
+	// Launch lister goroutine
+	var listErr error
 	go func() {
 		defer close(objectsCh)
 		for object := range m.client.ListObjects(ctx, m.bucket, minio.ListObjectsOptions{
 			Prefix:    key,
-			Recursive: true, // Recursive to get all objects
+			Recursive: true,
 		}) {
 			if object.Err != nil {
+				listErr = object.Err
 				return
 			}
 			objectsCh <- object
 		}
 	}()
 
-	// Remove all objects
-	for object := range objectsCh {
-		err := m.client.RemoveObject(ctx, m.bucket, object.Key, minio.RemoveObjectOptions{})
-		if err != nil {
-			return &fs.PathError{Op: "removeall", Path: path, Err: translateError(err)}
+	// Use RemoveObjects batch API for efficient deletion
+	errorCh := m.client.RemoveObjects(ctx, m.bucket, objectsCh, minio.RemoveObjectsOptions{})
+
+	// Collect errors from deletion
+	var errs []error
+	for err := range errorCh {
+		if err.Err != nil {
+			errs = append(errs, err.Err)
 		}
+	}
+
+	// Check for list error first
+	if listErr != nil {
+		return &fs.PathError{Op: "removeall", Path: path, Err: translateError(listErr)}
+	}
+
+	// Return first delete error if any
+	if len(errs) > 0 {
+		return &fs.PathError{Op: "removeall", Path: path, Err: translateError(errs[0])}
 	}
 
 	return nil
 }
 
 // Rename renames (moves) oldpath to newpath.
-// In S3, this is implemented as CopyObject + RemoveObject.
-// For directories, this recursively copies all objects (expensive!).
+// In S3/MinIO, this is implemented as parallel copy + batch delete.
+//
+// IMPORTANT: This operation is NOT atomic. If an error occurs during
+// the copy phase, some objects may have been copied. If an error occurs
+// during the delete phase, objects will exist at both old and new paths.
+//
+// For directories, this uses a bounded worker pool for parallel copies
+// followed by batch deletion. The default concurrency is 10 workers.
 func (m *MinioFS) Rename(oldpath, newpath string) error {
 	oldKey := m.joinPath(oldpath)
 	newKey := m.joinPath(newpath)
@@ -417,62 +467,41 @@ func (m *MinioFS) Rename(oldpath, newpath string) error {
 		return m.renameFile(oldKey, newKey, oldpath)
 	}
 
-	// Check if it's a virtual directory by listing objects with prefix
+	// Check if it's a virtual directory
 	dirPrefix := oldKey
 	if dirPrefix != "" && !strings.HasSuffix(dirPrefix, "/") {
 		dirPrefix = dirPrefix + "/"
 	}
 
-	// List all objects under this directory
-	var objectsToRename []string
-	for object := range m.client.ListObjects(ctx, m.bucket, minio.ListObjectsOptions{
-		Prefix:    dirPrefix,
-		Recursive: true,
-	}) {
-		if object.Err != nil {
-			return &fs.PathError{Op: "rename", Path: oldpath, Err: translateError(object.Err)}
-		}
-		objectsToRename = append(objectsToRename, object.Key)
-	}
-
-	// If no objects found, path doesn't exist
-	if len(objectsToRename) == 0 {
-		return &fs.PathError{Op: "rename", Path: oldpath, Err: fs.ErrNotExist}
-	}
-
-	// Copy all objects to new location
 	newPrefix := newKey
 	if newPrefix != "" && !strings.HasSuffix(newPrefix, "/") {
 		newPrefix = newPrefix + "/"
 	}
 
-	for _, objectKey := range objectsToRename {
-		// Calculate new key by replacing prefix
-		relPath := strings.TrimPrefix(objectKey, dirPrefix)
-		newObjectKey := newPrefix + relPath
-
-		// Copy object
-		src := minio.CopySrcOptions{
-			Bucket: m.bucket,
-			Object: objectKey,
-		}
-		dst := minio.CopyDestOptions{
-			Bucket: m.bucket,
-			Object: newObjectKey,
-		}
-
-		_, err := m.client.CopyObject(ctx, dst, src)
-		if err != nil {
-			return &fs.PathError{Op: "rename", Path: oldpath, Err: translateError(err)}
-		}
+	// Parallel copy all objects
+	copied, err := m.parallelCopy(ctx, dirPrefix, newPrefix)
+	if err != nil {
+		return &fs.PathError{Op: "rename", Path: oldpath, Err: translateError(err)}
 	}
 
-	// Remove all old objects
-	for _, objectKey := range objectsToRename {
-		err := m.client.RemoveObject(ctx, m.bucket, objectKey, minio.RemoveObjectOptions{})
-		if err != nil {
-			// Copy succeeded but remove failed - this is a partially completed operation
-			return &fs.PathError{Op: "rename", Path: oldpath, Err: translateError(err)}
+	if len(copied) == 0 {
+		return &fs.PathError{Op: "rename", Path: oldpath, Err: fs.ErrNotExist}
+	}
+
+	// Batch delete old objects
+	toDelete := make(chan minio.ObjectInfo, len(copied))
+	go func() {
+		defer close(toDelete)
+		for _, key := range copied {
+			toDelete <- minio.ObjectInfo{Key: key}
+		}
+	}()
+
+	errorCh := m.client.RemoveObjects(ctx, m.bucket, toDelete, minio.RemoveObjectsOptions{})
+	for err := range errorCh {
+		if err.Err != nil {
+			// Copy succeeded but delete failed - partial state
+			return &fs.PathError{Op: "rename", Path: oldpath, Err: translateError(err.Err)}
 		}
 	}
 
@@ -673,6 +702,7 @@ func (m *MinioFS) Chroot(dir string) (core.FS, error) {
 		bucket:             m.bucket,
 		prefix:             newPrefix,
 		multipartThreshold: m.multipartThreshold,
+		renameConcurrency:  m.renameConcurrency,
 	}, nil
 }
 
@@ -714,6 +744,57 @@ func (e *s3DirEntry) Info() (fs.FileInfo, error) {
 		modTime: e.modTime,
 		mode:    mode,
 	}, nil
+}
+
+// parallelCopy copies objects from old to new prefix using a worker pool.
+// Returns the list of successfully copied object keys for cleanup.
+func (m *MinioFS) parallelCopy(ctx context.Context, oldPrefix, newPrefix string) ([]string, error) {
+	// Create errgroup with concurrency limit
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.SetLimit(m.renameConcurrency)
+
+	// Track copied objects for deletion
+	var copiedMu sync.Mutex
+	var copied []string
+
+	// Stream objects and copy in parallel
+	for object := range m.client.ListObjects(egCtx, m.bucket, minio.ListObjectsOptions{
+		Prefix:    oldPrefix,
+		Recursive: true,
+	}) {
+		if object.Err != nil {
+			return copied, object.Err
+		}
+
+		objectKey := object.Key
+		eg.Go(func() error {
+			// Calculate new key
+			relPath := strings.TrimPrefix(objectKey, oldPrefix)
+			newKey := newPrefix + relPath
+
+			// Copy object
+			src := minio.CopySrcOptions{Bucket: m.bucket, Object: objectKey}
+			dst := minio.CopyDestOptions{Bucket: m.bucket, Object: newKey}
+
+			_, err := m.client.CopyObject(egCtx, dst, src)
+			if err != nil {
+				return fmt.Errorf("copy object %s to %s: %w", objectKey, newKey, err)
+			}
+
+			// Track for deletion
+			copiedMu.Lock()
+			copied = append(copied, objectKey)
+			copiedMu.Unlock()
+
+			return nil
+		})
+	}
+
+	if err := eg.Wait(); err != nil {
+		return copied, fmt.Errorf("parallel copy failed: %w", err)
+	}
+
+	return copied, nil
 }
 
 // Compile-time interface check.

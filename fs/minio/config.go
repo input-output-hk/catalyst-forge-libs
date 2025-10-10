@@ -35,6 +35,11 @@ type Config struct {
 	// Default: 5MB (MinIO SDK default)
 	// Set to 0 to use SDK default
 	MultipartThreshold int64
+
+	// MaxRenameConcurrency limits concurrent copies during directory rename
+	// Default: 10
+	// Higher values speed up renames but increase server load
+	MaxRenameConcurrency int
 }
 
 // validate checks if the configuration is valid.

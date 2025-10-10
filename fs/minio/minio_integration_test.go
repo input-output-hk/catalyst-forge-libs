@@ -74,14 +74,14 @@ func setupTestMinIO(t *testing.T) (*MinioFS, func()) {
 	return fs, cleanup
 }
 
-// TestIntegration_NewFileRead tests the newFileRead function with a real MinIO instance.
-func TestIntegration_NewFileRead(t *testing.T) {
+// TestIntegration_StreamingFile tests the newStreamingFile function with a real MinIO instance.
+func TestIntegration_StreamingFile(t *testing.T) {
 	fs, cleanup := setupTestMinIO(t)
 	defer cleanup()
 
 	ctx := context.Background()
 
-	t.Run("download existing object", func(t *testing.T) {
+	t.Run("stream existing object", func(t *testing.T) {
 		// Upload test data first
 		testData := []byte("hello from minio")
 		_, err := fs.client.PutObject(
@@ -94,29 +94,29 @@ func TestIntegration_NewFileRead(t *testing.T) {
 		)
 		require.NoError(t, err, "failed to upload test object")
 
-		// Now test newFileRead
-		file, err := newFileRead(ctx, fs, "test-file.txt", "test-file.txt")
-		require.NoError(t, err, "newFileRead should succeed")
+		// Now test newStreamingFile
+		file, err := newStreamingFile(ctx, fs, "test-file.txt", "test-file.txt")
+		require.NoError(t, err, "newStreamingFile should succeed")
 		require.NotNil(t, file, "file should not be nil")
+		defer func() {
+			_ = file.Close()
+		}()
 
 		// Verify file properties
 		assert.Equal(t, "test-file.txt", file.name)
 		assert.Equal(t, "test-file.txt", file.key)
-		assert.Equal(t, os.O_RDONLY, file.mode)
-		assert.NotNil(t, file.reader)
-		assert.Equal(t, int64(len(testData)), file.size)
-		assert.False(t, file.modTime.IsZero())
+		assert.False(t, file.closed)
+		assert.Equal(t, int64(len(testData)), file.info.Size)
+		assert.False(t, file.info.LastModified.IsZero())
 
 		// Read the data and verify
-		buf := make([]byte, len(testData))
-		n, err := file.Read(buf)
+		buf, err := io.ReadAll(file)
 		require.NoError(t, err)
-		assert.Equal(t, len(testData), n)
 		assert.Equal(t, testData, buf)
 	})
 
-	t.Run("download non-existent object returns error", func(t *testing.T) {
-		file, err := newFileRead(ctx, fs, "non-existent.txt", "non-existent.txt")
+	t.Run("stream non-existent object returns error", func(t *testing.T) {
+		file, err := newStreamingFile(ctx, fs, "non-existent.txt", "non-existent.txt")
 		require.Error(t, err, "should return error for non-existent object")
 		assert.Nil(t, file)
 	})
@@ -239,10 +239,10 @@ func TestIntegration_FileClose(t *testing.T) {
 		require.NoError(t, err)
 
 		// Open in read mode
-		file, err := newFileRead(ctx, fs, "read-close-test.txt", "read-close-test.txt")
+		file, err := newStreamingFile(ctx, fs, "read-close-test.txt", "read-close-test.txt")
 		require.NoError(t, err)
 
-		// Close should be a no-op
+		// Close should release resources
 		err = file.Close() //nolint:contextcheck // Close() implements io.Closer and cannot accept context
 		require.NoError(t, err, "close should succeed in read mode")
 
@@ -584,7 +584,7 @@ func Benchmark_FileWrite(b *testing.B) {
 	}
 }
 
-// Benchmark_FileRead benchmarks read operations.
+// Benchmark_FileRead benchmarks read operations with streaming.
 func Benchmark_FileRead(b *testing.B) {
 	if testing.Short() {
 		b.Skip("skipping benchmark in short mode")
@@ -608,7 +608,7 @@ func Benchmark_FileRead(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		file, _ := newFileRead(ctx, fs, "bench-read.txt", "bench-read.txt")
+		file, _ := newStreamingFile(ctx, fs, "bench-read.txt", "bench-read.txt")
 		buf := make([]byte, len(testData))
 		_, _ = file.Read(buf)
 		_ = file.Close()
