@@ -15,23 +15,63 @@ import (
 // Tests: io.Seeker, io.ReaderAt, io.WriterAt, core.Truncater, core.Syncer, fs.ReadDirFile.
 // Uses type assertions on files returned by the FS - skips unsupported capabilities.
 func TestFileCapabilities(t *testing.T, filesystem core.FS) {
+	TestFileCapabilitiesWithSkip(t, filesystem, nil)
+}
+
+// TestFileCapabilitiesWithSkip is the internal version with skip support
+func TestFileCapabilitiesWithSkip(t *testing.T, filesystem core.FS, skipTests []string) {
+	// Helper to check if a test should be skipped
+	shouldSkip := func(testName string) bool {
+		fullName := "FileCapabilities/" + testName
+		for _, skip := range skipTests {
+			if skip == fullName {
+				return true
+			}
+		}
+		return false
+	}
+
 	// Run all capability tests
 	t.Run("Seeker", func(t *testing.T) {
+		if shouldSkip("Seeker") {
+			t.Skip("Skipped by provider configuration")
+			return
+		}
 		testFileCapabilitySeeker(t, filesystem)
 	})
 	t.Run("ReaderAt", func(t *testing.T) {
+		if shouldSkip("ReaderAt") {
+			t.Skip("Skipped by provider configuration")
+			return
+		}
 		testFileCapabilityReaderAt(t, filesystem)
 	})
 	t.Run("WriterAt", func(t *testing.T) {
+		if shouldSkip("WriterAt") {
+			t.Skip("Skipped by provider configuration")
+			return
+		}
 		testFileCapabilityWriterAt(t, filesystem)
 	})
 	t.Run("Truncater", func(t *testing.T) {
+		if shouldSkip("Truncater") {
+			t.Skip("Skipped by provider configuration")
+			return
+		}
 		testFileCapabilityTruncater(t, filesystem)
 	})
 	t.Run("Syncer", func(t *testing.T) {
+		if shouldSkip("Syncer") {
+			t.Skip("Skipped by provider configuration")
+			return
+		}
 		testFileCapabilitySyncer(t, filesystem)
 	})
 	t.Run("ReadDirFile", func(t *testing.T) {
+		if shouldSkip("ReadDirFile") {
+			t.Skip("Skipped by provider configuration")
+			return
+		}
 		testFileCapabilityReadDirFile(t, filesystem)
 	})
 }

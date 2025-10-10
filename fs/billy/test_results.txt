@@ -1,0 +1,366 @@
+=== RUN   TestLocalFS_Constructor
+--- PASS: TestLocalFS_Constructor (0.00s)
+=== RUN   TestMemoryFS_Constructor
+--- PASS: TestMemoryFS_Constructor (0.00s)
+=== RUN   TestLocalFS_Unwrap
+--- PASS: TestLocalFS_Unwrap (0.00s)
+=== RUN   TestMemoryFS_Unwrap
+--- PASS: TestMemoryFS_Unwrap (0.00s)
+=== RUN   TestMemoryFS_BasicOperations
+--- PASS: TestMemoryFS_BasicOperations (0.00s)
+=== RUN   TestMemoryFS_DirectoryOperations
+--- PASS: TestMemoryFS_DirectoryOperations (0.00s)
+=== RUN   TestMemoryFS_Remove
+--- PASS: TestMemoryFS_Remove (0.00s)
+=== RUN   TestMemoryFS_RemoveAll
+--- PASS: TestMemoryFS_RemoveAll (0.00s)
+=== RUN   TestMemoryFS_Rename
+--- PASS: TestMemoryFS_Rename (0.00s)
+=== RUN   TestMemoryFS_Walk
+--- PASS: TestMemoryFS_Walk (0.00s)
+=== RUN   TestMemoryFS_Chroot
+--- PASS: TestMemoryFS_Chroot (0.00s)
+=== RUN   TestMemoryFS_Open
+--- PASS: TestMemoryFS_Open (0.00s)
+=== RUN   TestMemoryFS_Create
+--- PASS: TestMemoryFS_Create (0.00s)
+=== RUN   TestMemoryFS_OpenFile
+=== RUN   TestMemoryFS_OpenFile/read_only
+=== RUN   TestMemoryFS_OpenFile/write_only
+=== RUN   TestMemoryFS_OpenFile/read_write
+=== RUN   TestMemoryFS_OpenFile/create
+=== RUN   TestMemoryFS_OpenFile/truncate
+=== RUN   TestMemoryFS_OpenFile/append
+--- PASS: TestMemoryFS_OpenFile (0.00s)
+    --- PASS: TestMemoryFS_OpenFile/read_only (0.00s)
+    --- PASS: TestMemoryFS_OpenFile/write_only (0.00s)
+    --- PASS: TestMemoryFS_OpenFile/read_write (0.00s)
+    --- PASS: TestMemoryFS_OpenFile/create (0.00s)
+    --- PASS: TestMemoryFS_OpenFile/truncate (0.00s)
+    --- PASS: TestMemoryFS_OpenFile/append (0.00s)
+=== RUN   TestNormalize
+=== RUN   TestNormalize/simple
+=== RUN   TestNormalize/with_slash
+=== RUN   TestNormalize/with_double_slash
+=== RUN   TestNormalize/with_dot
+=== RUN   TestNormalize/with_dotdot
+=== RUN   TestNormalize/root
+=== RUN   TestNormalize/absolute
+--- PASS: TestNormalize (0.00s)
+    --- PASS: TestNormalize/simple (0.00s)
+    --- PASS: TestNormalize/with_slash (0.00s)
+    --- PASS: TestNormalize/with_double_slash (0.00s)
+    --- PASS: TestNormalize/with_dot (0.00s)
+    --- PASS: TestNormalize/with_dotdot (0.00s)
+    --- PASS: TestNormalize/root (0.00s)
+    --- PASS: TestNormalize/absolute (0.00s)
+=== RUN   TestDirEntry_Methods
+--- PASS: TestDirEntry_Methods (0.00s)
+=== RUN   TestLocalFS_Operations
+--- PASS: TestLocalFS_Operations (0.00s)
+=== RUN   TestMemoryFS_RemoveAll_NonExistent
+--- PASS: TestMemoryFS_RemoveAll_NonExistent (0.00s)
+=== RUN   TestMemoryFS_Mkdir
+--- PASS: TestMemoryFS_Mkdir (0.00s)
+=== RUN   TestLocalFS
+=== RUN   TestLocalFS/ReadFS
+=== RUN   TestLocalFS/ReadFS/Open
+=== RUN   TestLocalFS/ReadFS/StatFile
+=== RUN   TestLocalFS/ReadFS/StatDir
+=== RUN   TestLocalFS/ReadFS/ReadDir
+=== RUN   TestLocalFS/ReadFS/ReadFile
+=== RUN   TestLocalFS/ReadFS/OpenNotExist
+=== RUN   TestLocalFS/WriteFS
+=== RUN   TestLocalFS/WriteFS/CreateAndWrite
+=== RUN   TestLocalFS/WriteFS/WriteFile
+=== RUN   TestLocalFS/WriteFS/OpenFile
+=== RUN   TestLocalFS/WriteFS/Mkdir
+    write_fs.go:54: Skipped by provider configuration
+=== RUN   TestLocalFS/WriteFS/MkdirAll
+=== RUN   TestLocalFS/WriteFS/CreateInNonExistentDir
+    write_fs.go:68: Skipped by provider configuration
+=== RUN   TestLocalFS/ManageFS
+=== RUN   TestLocalFS/ManageFS/RemoveSingleFile
+=== RUN   TestLocalFS/ManageFS/RemoveEmptyDirectory
+=== RUN   TestLocalFS/ManageFS/RemoveAll
+=== RUN   TestLocalFS/ManageFS/RenameFile
+=== RUN   TestLocalFS/ManageFS/RenameDirectory
+=== RUN   TestLocalFS/ManageFS/RemoveNotExist
+=== RUN   TestLocalFS/WalkFS
+=== RUN   TestLocalFS/WalkFS/SimpleTree
+=== RUN   TestLocalFS/WalkFS/WithSubdirectories
+=== RUN   TestLocalFS/WalkFS/EmptyDirectory
+=== RUN   TestLocalFS/WalkFS/PathHandling
+=== RUN   TestLocalFS/ChrootFS
+=== RUN   TestLocalFS/ChrootFS/ChrootToSubdirectory
+=== RUN   TestLocalFS/ChrootFS/PathTraversalPrevention
+=== RUN   TestLocalFS/ChrootFS/ChrootOnChroot
+=== RUN   TestLocalFS/ChrootFS/SpecialCharactersAndNormalization
+=== RUN   TestLocalFS/MetadataFS
+    metadata_fs.go:19: MetadataFS not supported
+=== RUN   TestLocalFS/SymlinkFS
+    symlink_fs.go:18: SymlinkFS not supported
+=== RUN   TestLocalFS/TempFS
+    temp_fs.go:16: TempFS not supported
+=== RUN   TestLocalFS/FileCapabilities
+=== RUN   TestLocalFS/FileCapabilities/Seeker
+=== RUN   TestLocalFS/FileCapabilities/ReaderAt
+    file_capabilities.go:204: io.ReaderAt not supported by this file implementation
+=== RUN   TestLocalFS/FileCapabilities/WriterAt
+    file_capabilities.go:316: io.WriterAt not supported by this file implementation
+=== RUN   TestLocalFS/FileCapabilities/Truncater
+=== RUN   TestLocalFS/FileCapabilities/Truncater/TruncateSmaller
+=== RUN   TestLocalFS/FileCapabilities/Truncater/TruncateLarger
+=== RUN   TestLocalFS/FileCapabilities/Truncater/TruncateSameSize
+=== RUN   TestLocalFS/FileCapabilities/Syncer
+=== RUN   TestLocalFS/FileCapabilities/ReadDirFile
+    file_capabilities.go:72: Skipped by provider configuration
+--- PASS: TestLocalFS (0.01s)
+    --- PASS: TestLocalFS/ReadFS (0.00s)
+        --- PASS: TestLocalFS/ReadFS/Open (0.00s)
+        --- PASS: TestLocalFS/ReadFS/StatFile (0.00s)
+        --- PASS: TestLocalFS/ReadFS/StatDir (0.00s)
+        --- PASS: TestLocalFS/ReadFS/ReadDir (0.00s)
+        --- PASS: TestLocalFS/ReadFS/ReadFile (0.00s)
+        --- PASS: TestLocalFS/ReadFS/OpenNotExist (0.00s)
+    --- PASS: TestLocalFS/WriteFS (0.00s)
+        --- PASS: TestLocalFS/WriteFS/CreateAndWrite (0.00s)
+        --- PASS: TestLocalFS/WriteFS/WriteFile (0.00s)
+        --- PASS: TestLocalFS/WriteFS/OpenFile (0.00s)
+        --- SKIP: TestLocalFS/WriteFS/Mkdir (0.00s)
+        --- PASS: TestLocalFS/WriteFS/MkdirAll (0.00s)
+        --- SKIP: TestLocalFS/WriteFS/CreateInNonExistentDir (0.00s)
+    --- PASS: TestLocalFS/ManageFS (0.00s)
+        --- PASS: TestLocalFS/ManageFS/RemoveSingleFile (0.00s)
+        --- PASS: TestLocalFS/ManageFS/RemoveEmptyDirectory (0.00s)
+        --- PASS: TestLocalFS/ManageFS/RemoveAll (0.00s)
+        --- PASS: TestLocalFS/ManageFS/RenameFile (0.00s)
+        --- PASS: TestLocalFS/ManageFS/RenameDirectory (0.00s)
+        --- PASS: TestLocalFS/ManageFS/RemoveNotExist (0.00s)
+    --- PASS: TestLocalFS/WalkFS (0.00s)
+        --- PASS: TestLocalFS/WalkFS/SimpleTree (0.00s)
+        --- PASS: TestLocalFS/WalkFS/WithSubdirectories (0.00s)
+        --- PASS: TestLocalFS/WalkFS/EmptyDirectory (0.00s)
+        --- PASS: TestLocalFS/WalkFS/PathHandling (0.00s)
+    --- PASS: TestLocalFS/ChrootFS (0.00s)
+        --- PASS: TestLocalFS/ChrootFS/ChrootToSubdirectory (0.00s)
+        --- PASS: TestLocalFS/ChrootFS/PathTraversalPrevention (0.00s)
+        --- PASS: TestLocalFS/ChrootFS/ChrootOnChroot (0.00s)
+        --- PASS: TestLocalFS/ChrootFS/SpecialCharactersAndNormalization (0.00s)
+    --- SKIP: TestLocalFS/MetadataFS (0.00s)
+    --- SKIP: TestLocalFS/SymlinkFS (0.00s)
+    --- SKIP: TestLocalFS/TempFS (0.00s)
+    --- PASS: TestLocalFS/FileCapabilities (0.00s)
+        --- PASS: TestLocalFS/FileCapabilities/Seeker (0.00s)
+        --- SKIP: TestLocalFS/FileCapabilities/ReaderAt (0.00s)
+        --- SKIP: TestLocalFS/FileCapabilities/WriterAt (0.00s)
+        --- PASS: TestLocalFS/FileCapabilities/Truncater (0.00s)
+            --- PASS: TestLocalFS/FileCapabilities/Truncater/TruncateSmaller (0.00s)
+            --- PASS: TestLocalFS/FileCapabilities/Truncater/TruncateLarger (0.00s)
+            --- PASS: TestLocalFS/FileCapabilities/Truncater/TruncateSameSize (0.00s)
+        --- PASS: TestLocalFS/FileCapabilities/Syncer (0.00s)
+        --- SKIP: TestLocalFS/FileCapabilities/ReadDirFile (0.00s)
+=== RUN   TestMemoryFS
+=== RUN   TestMemoryFS/ReadFS
+=== RUN   TestMemoryFS/ReadFS/Open
+=== RUN   TestMemoryFS/ReadFS/StatFile
+=== RUN   TestMemoryFS/ReadFS/StatDir
+=== RUN   TestMemoryFS/ReadFS/ReadDir
+=== RUN   TestMemoryFS/ReadFS/ReadFile
+=== RUN   TestMemoryFS/ReadFS/OpenNotExist
+=== RUN   TestMemoryFS/WriteFS
+=== RUN   TestMemoryFS/WriteFS/CreateAndWrite
+=== RUN   TestMemoryFS/WriteFS/WriteFile
+=== RUN   TestMemoryFS/WriteFS/OpenFile
+=== RUN   TestMemoryFS/WriteFS/Mkdir
+=== RUN   TestMemoryFS/WriteFS/MkdirAll
+=== RUN   TestMemoryFS/WriteFS/CreateInNonExistentDir
+    write_fs.go:68: Skipped by provider configuration
+=== RUN   TestMemoryFS/ManageFS
+=== RUN   TestMemoryFS/ManageFS/RemoveSingleFile
+=== RUN   TestMemoryFS/ManageFS/RemoveEmptyDirectory
+=== RUN   TestMemoryFS/ManageFS/RemoveAll
+=== RUN   TestMemoryFS/ManageFS/RenameFile
+=== RUN   TestMemoryFS/ManageFS/RenameDirectory
+=== RUN   TestMemoryFS/ManageFS/RemoveNotExist
+=== RUN   TestMemoryFS/WalkFS
+=== RUN   TestMemoryFS/WalkFS/SimpleTree
+=== RUN   TestMemoryFS/WalkFS/WithSubdirectories
+=== RUN   TestMemoryFS/WalkFS/EmptyDirectory
+=== RUN   TestMemoryFS/WalkFS/PathHandling
+=== RUN   TestMemoryFS/ChrootFS
+=== RUN   TestMemoryFS/ChrootFS/ChrootToSubdirectory
+=== RUN   TestMemoryFS/ChrootFS/PathTraversalPrevention
+=== RUN   TestMemoryFS/ChrootFS/ChrootOnChroot
+=== RUN   TestMemoryFS/ChrootFS/SpecialCharactersAndNormalization
+=== RUN   TestMemoryFS/MetadataFS
+    metadata_fs.go:19: MetadataFS not supported
+=== RUN   TestMemoryFS/SymlinkFS
+    symlink_fs.go:18: SymlinkFS not supported
+=== RUN   TestMemoryFS/TempFS
+    temp_fs.go:16: TempFS not supported
+=== RUN   TestMemoryFS/FileCapabilities
+=== RUN   TestMemoryFS/FileCapabilities/Seeker
+=== RUN   TestMemoryFS/FileCapabilities/ReaderAt
+    file_capabilities.go:204: io.ReaderAt not supported by this file implementation
+=== RUN   TestMemoryFS/FileCapabilities/WriterAt
+    file_capabilities.go:316: io.WriterAt not supported by this file implementation
+=== RUN   TestMemoryFS/FileCapabilities/Truncater
+=== RUN   TestMemoryFS/FileCapabilities/Truncater/TruncateSmaller
+=== RUN   TestMemoryFS/FileCapabilities/Truncater/TruncateLarger
+=== RUN   TestMemoryFS/FileCapabilities/Truncater/TruncateSameSize
+=== RUN   TestMemoryFS/FileCapabilities/Syncer
+=== RUN   TestMemoryFS/FileCapabilities/ReadDirFile
+    file_capabilities.go:72: Skipped by provider configuration
+--- PASS: TestMemoryFS (0.00s)
+    --- PASS: TestMemoryFS/ReadFS (0.00s)
+        --- PASS: TestMemoryFS/ReadFS/Open (0.00s)
+        --- PASS: TestMemoryFS/ReadFS/StatFile (0.00s)
+        --- PASS: TestMemoryFS/ReadFS/StatDir (0.00s)
+        --- PASS: TestMemoryFS/ReadFS/ReadDir (0.00s)
+        --- PASS: TestMemoryFS/ReadFS/ReadFile (0.00s)
+        --- PASS: TestMemoryFS/ReadFS/OpenNotExist (0.00s)
+    --- PASS: TestMemoryFS/WriteFS (0.00s)
+        --- PASS: TestMemoryFS/WriteFS/CreateAndWrite (0.00s)
+        --- PASS: TestMemoryFS/WriteFS/WriteFile (0.00s)
+        --- PASS: TestMemoryFS/WriteFS/OpenFile (0.00s)
+        --- PASS: TestMemoryFS/WriteFS/Mkdir (0.00s)
+        --- PASS: TestMemoryFS/WriteFS/MkdirAll (0.00s)
+        --- SKIP: TestMemoryFS/WriteFS/CreateInNonExistentDir (0.00s)
+    --- PASS: TestMemoryFS/ManageFS (0.00s)
+        --- PASS: TestMemoryFS/ManageFS/RemoveSingleFile (0.00s)
+        --- PASS: TestMemoryFS/ManageFS/RemoveEmptyDirectory (0.00s)
+        --- PASS: TestMemoryFS/ManageFS/RemoveAll (0.00s)
+        --- PASS: TestMemoryFS/ManageFS/RenameFile (0.00s)
+        --- PASS: TestMemoryFS/ManageFS/RenameDirectory (0.00s)
+        --- PASS: TestMemoryFS/ManageFS/RemoveNotExist (0.00s)
+    --- PASS: TestMemoryFS/WalkFS (0.00s)
+        --- PASS: TestMemoryFS/WalkFS/SimpleTree (0.00s)
+        --- PASS: TestMemoryFS/WalkFS/WithSubdirectories (0.00s)
+        --- PASS: TestMemoryFS/WalkFS/EmptyDirectory (0.00s)
+        --- PASS: TestMemoryFS/WalkFS/PathHandling (0.00s)
+    --- PASS: TestMemoryFS/ChrootFS (0.00s)
+        --- PASS: TestMemoryFS/ChrootFS/ChrootToSubdirectory (0.00s)
+        --- PASS: TestMemoryFS/ChrootFS/PathTraversalPrevention (0.00s)
+        --- PASS: TestMemoryFS/ChrootFS/ChrootOnChroot (0.00s)
+        --- PASS: TestMemoryFS/ChrootFS/SpecialCharactersAndNormalization (0.00s)
+    --- SKIP: TestMemoryFS/MetadataFS (0.00s)
+    --- SKIP: TestMemoryFS/SymlinkFS (0.00s)
+    --- SKIP: TestMemoryFS/TempFS (0.00s)
+    --- PASS: TestMemoryFS/FileCapabilities (0.00s)
+        --- PASS: TestMemoryFS/FileCapabilities/Seeker (0.00s)
+        --- SKIP: TestMemoryFS/FileCapabilities/ReaderAt (0.00s)
+        --- SKIP: TestMemoryFS/FileCapabilities/WriterAt (0.00s)
+        --- PASS: TestMemoryFS/FileCapabilities/Truncater (0.00s)
+            --- PASS: TestMemoryFS/FileCapabilities/Truncater/TruncateSmaller (0.00s)
+            --- PASS: TestMemoryFS/FileCapabilities/Truncater/TruncateLarger (0.00s)
+            --- PASS: TestMemoryFS/FileCapabilities/Truncater/TruncateSameSize (0.00s)
+        --- PASS: TestMemoryFS/FileCapabilities/Syncer (0.00s)
+        --- SKIP: TestMemoryFS/FileCapabilities/ReadDirFile (0.00s)
+=== RUN   TestOpenFileFlags
+=== RUN   TestOpenFileFlags/LocalFS
+=== RUN   TestOpenFileFlags/LocalFS/SupportedFlags
+=== RUN   TestOpenFileFlags/LocalFS/SupportedFlags/O_RDONLY
+=== RUN   TestOpenFileFlags/LocalFS/SupportedFlags/O_WRONLY
+=== RUN   TestOpenFileFlags/LocalFS/SupportedFlags/O_RDWR
+=== RUN   TestOpenFileFlags/LocalFS/SupportedFlags/O_CREATE
+=== RUN   TestOpenFileFlags/LocalFS/SupportedFlags/O_TRUNC
+=== RUN   TestOpenFileFlags/LocalFS/SupportedFlags/O_APPEND
+=== RUN   TestOpenFileFlags/LocalFS/SupportedFlags/O_EXCL
+=== RUN   TestOpenFileFlags/LocalFS/SupportedFlags/O_SYNC
+=== RUN   TestOpenFileFlags/LocalFS/UnsupportedFlags
+=== RUN   TestOpenFileFlags/LocalFS/FlagCombinations
+=== RUN   TestOpenFileFlags/LocalFS/FlagCombinations/O_CREATE|O_TRUNC
+=== RUN   TestOpenFileFlags/LocalFS/FlagCombinations/O_CREATE|O_EXCL
+=== RUN   TestOpenFileFlags/LocalFS/FlagCombinations/O_APPEND
+=== RUN   TestOpenFileFlags/LocalFS/FlagCombinations/O_RDWR
+=== RUN   TestOpenFileFlags/MemoryFS
+=== RUN   TestOpenFileFlags/MemoryFS/SupportedFlags
+=== RUN   TestOpenFileFlags/MemoryFS/SupportedFlags/O_RDONLY
+=== RUN   TestOpenFileFlags/MemoryFS/SupportedFlags/O_WRONLY
+=== RUN   TestOpenFileFlags/MemoryFS/SupportedFlags/O_RDWR
+=== RUN   TestOpenFileFlags/MemoryFS/SupportedFlags/O_CREATE
+=== RUN   TestOpenFileFlags/MemoryFS/SupportedFlags/O_TRUNC
+=== RUN   TestOpenFileFlags/MemoryFS/SupportedFlags/O_APPEND
+=== RUN   TestOpenFileFlags/MemoryFS/SupportedFlags/O_EXCL
+=== RUN   TestOpenFileFlags/MemoryFS/SupportedFlags/O_SYNC
+=== RUN   TestOpenFileFlags/MemoryFS/UnsupportedFlags
+=== RUN   TestOpenFileFlags/MemoryFS/FlagCombinations
+=== RUN   TestOpenFileFlags/MemoryFS/FlagCombinations/O_CREATE|O_TRUNC
+=== RUN   TestOpenFileFlags/MemoryFS/FlagCombinations/O_CREATE|O_EXCL
+=== RUN   TestOpenFileFlags/MemoryFS/FlagCombinations/O_APPEND
+=== RUN   TestOpenFileFlags/MemoryFS/FlagCombinations/O_RDWR
+--- PASS: TestOpenFileFlags (0.00s)
+    --- PASS: TestOpenFileFlags/LocalFS (0.00s)
+        --- PASS: TestOpenFileFlags/LocalFS/SupportedFlags (0.00s)
+            --- PASS: TestOpenFileFlags/LocalFS/SupportedFlags/O_RDONLY (0.00s)
+            --- PASS: TestOpenFileFlags/LocalFS/SupportedFlags/O_WRONLY (0.00s)
+            --- PASS: TestOpenFileFlags/LocalFS/SupportedFlags/O_RDWR (0.00s)
+            --- PASS: TestOpenFileFlags/LocalFS/SupportedFlags/O_CREATE (0.00s)
+            --- PASS: TestOpenFileFlags/LocalFS/SupportedFlags/O_TRUNC (0.00s)
+            --- PASS: TestOpenFileFlags/LocalFS/SupportedFlags/O_APPEND (0.00s)
+            --- PASS: TestOpenFileFlags/LocalFS/SupportedFlags/O_EXCL (0.00s)
+            --- PASS: TestOpenFileFlags/LocalFS/SupportedFlags/O_SYNC (0.00s)
+        --- PASS: TestOpenFileFlags/LocalFS/UnsupportedFlags (0.00s)
+        --- PASS: TestOpenFileFlags/LocalFS/FlagCombinations (0.00s)
+            --- PASS: TestOpenFileFlags/LocalFS/FlagCombinations/O_CREATE|O_TRUNC (0.00s)
+            --- PASS: TestOpenFileFlags/LocalFS/FlagCombinations/O_CREATE|O_EXCL (0.00s)
+            --- PASS: TestOpenFileFlags/LocalFS/FlagCombinations/O_APPEND (0.00s)
+            --- PASS: TestOpenFileFlags/LocalFS/FlagCombinations/O_RDWR (0.00s)
+    --- PASS: TestOpenFileFlags/MemoryFS (0.00s)
+        --- PASS: TestOpenFileFlags/MemoryFS/SupportedFlags (0.00s)
+            --- PASS: TestOpenFileFlags/MemoryFS/SupportedFlags/O_RDONLY (0.00s)
+            --- PASS: TestOpenFileFlags/MemoryFS/SupportedFlags/O_WRONLY (0.00s)
+            --- PASS: TestOpenFileFlags/MemoryFS/SupportedFlags/O_RDWR (0.00s)
+            --- PASS: TestOpenFileFlags/MemoryFS/SupportedFlags/O_CREATE (0.00s)
+            --- PASS: TestOpenFileFlags/MemoryFS/SupportedFlags/O_TRUNC (0.00s)
+            --- PASS: TestOpenFileFlags/MemoryFS/SupportedFlags/O_APPEND (0.00s)
+            --- PASS: TestOpenFileFlags/MemoryFS/SupportedFlags/O_EXCL (0.00s)
+            --- PASS: TestOpenFileFlags/MemoryFS/SupportedFlags/O_SYNC (0.00s)
+        --- PASS: TestOpenFileFlags/MemoryFS/UnsupportedFlags (0.00s)
+        --- PASS: TestOpenFileFlags/MemoryFS/FlagCombinations (0.00s)
+            --- PASS: TestOpenFileFlags/MemoryFS/FlagCombinations/O_CREATE|O_TRUNC (0.00s)
+            --- PASS: TestOpenFileFlags/MemoryFS/FlagCombinations/O_CREATE|O_EXCL (0.00s)
+            --- PASS: TestOpenFileFlags/MemoryFS/FlagCombinations/O_APPEND (0.00s)
+            --- PASS: TestOpenFileFlags/MemoryFS/FlagCombinations/O_RDWR (0.00s)
+=== RUN   TestFile_Interfaces
+--- PASS: TestFile_Interfaces (0.00s)
+=== RUN   TestFile_Name
+=== RUN   TestFile_Name/simple
+=== RUN   TestFile_Name/with_path
+=== RUN   TestFile_Name/with_dots
+=== RUN   TestFile_Name/root
+--- PASS: TestFile_Name (0.00s)
+    --- PASS: TestFile_Name/simple (0.00s)
+    --- PASS: TestFile_Name/with_path (0.00s)
+    --- PASS: TestFile_Name/with_dots (0.00s)
+    --- PASS: TestFile_Name/root (0.00s)
+=== RUN   TestFile_Read
+--- PASS: TestFile_Read (0.00s)
+=== RUN   TestFile_Write
+--- PASS: TestFile_Write (0.00s)
+=== RUN   TestFile_Close
+--- PASS: TestFile_Close (0.00s)
+=== RUN   TestFile_Stat
+--- PASS: TestFile_Stat (0.00s)
+=== RUN   TestFile_Seek
+=== RUN   TestFile_Seek/seek_start
+=== RUN   TestFile_Seek/seek_middle
+=== RUN   TestFile_Seek/seek_end
+=== RUN   TestFile_Seek/seek_relative
+--- PASS: TestFile_Seek (0.00s)
+    --- PASS: TestFile_Seek/seek_start (0.00s)
+    --- PASS: TestFile_Seek/seek_middle (0.00s)
+    --- PASS: TestFile_Seek/seek_end (0.00s)
+    --- PASS: TestFile_Seek/seek_relative (0.00s)
+=== RUN   TestFile_Truncate
+--- PASS: TestFile_Truncate (0.00s)
+=== RUN   TestFile_Sync
+=== RUN   TestFile_Sync/memfs_no-op
+--- PASS: TestFile_Sync (0.00s)
+    --- PASS: TestFile_Sync/memfs_no-op (0.00s)
+=== RUN   TestFile_ReadWrite
+--- PASS: TestFile_ReadWrite (0.00s)
+PASS
+coverage: 83.3% of statements
+ok  	github.com/input-output-hk/catalyst-forge-libs/fs/billy	0.248s

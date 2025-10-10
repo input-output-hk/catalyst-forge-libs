@@ -1,0 +1,2 @@
+level=warning msg="[runner] Can't process results by diff processor: can't prepare diff by revgrep: could not read git repo: error executing \"git merge-base main HEAD\": exit status 128: fatal: Not a valid object name main\n"
+0 issues.

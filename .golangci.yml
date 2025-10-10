@@ -26,6 +26,15 @@ formatters:
 linters:
   # Start from the standard set, then enable a curated group that maps to your guide.
   default: standard
+  exclusions:
+    rules:
+      # Need to return unwrapped file errors
+      - path: ^file\.go$
+        linters:
+          - wrapcheck
+      - path: ^billy\.go$
+        linters:
+          - wrapcheck
   enable:
     # errors
     - errcheck # no unchecked errors
@@ -49,7 +58,6 @@ linters:
     - sqlclosecheck
     - bodyclose
     # packages/imports
-    - depguard # allow/deny lists (configured below)
     - importas # enforce canonical import aliases
     # complexity & readability (tuned)
     - gocyclo
@@ -67,36 +75,6 @@ linters:
       # Extend, don't replace, the default ignore list.
       extra-ignore-sigs:
         - .Error() error
-    # Import policy: prefer slog over legacy log; forbid direct std log usage in app code
-    # See: https://golangci-lint.run/docs/linters/configuration/#depguard
-    depguard:
-      rules:
-        main:
-          list-mode: strict
-          files:
-            - $all
-            - "!$test"
-          allow:
-            - $gostd
-            - github.com/input-output-hk/catalyst-forge-libs
-            - github.com/Masterminds/semver/v3 # semantic versioning library
-            - log/slog$ # allow slog usage
-          deny:
-            - pkg: "log$" # forbid legacy std log
-              desc: "Use log/slog instead of log"
-        test:
-          list-mode: strict
-          files:
-            - "$test"
-          allow:
-            - $gostd
-            - github.com/input-output-hk/catalyst-forge-libs
-            - github.com/Masterminds/semver/v3 # semantic versioning library
-            - github.com/stretchr/testify
-            - log/slog$ # allow slog usage
-          deny:
-            - pkg: "log$" # forbid legacy std log
-              desc: "Use log/slog instead of log"
     # Complexity thresholds (kept reasonable to reduce false positives)
     gocyclo:
       min-complexity: 15

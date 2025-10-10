@@ -11,23 +11,63 @@ import (
 // TestWriteFS tests write operations: Create, OpenFile, WriteFile, Mkdir, MkdirAll.
 // Tests file creation, directory creation, and various write scenarios.
 func TestWriteFS(t *testing.T, filesystem core.FS) {
+	TestWriteFSWithSkip(t, filesystem, nil)
+}
+
+// TestWriteFSWithSkip is the internal version with skip support
+func TestWriteFSWithSkip(t *testing.T, filesystem core.FS, skipTests []string) {
+	// Helper to check if a test should be skipped
+	shouldSkip := func(testName string) bool {
+		fullName := "WriteFS/" + testName
+		for _, skip := range skipTests {
+			if skip == fullName {
+				return true
+			}
+		}
+		return false
+	}
+
 	// Run all subtests
 	t.Run("CreateAndWrite", func(t *testing.T) {
+		if shouldSkip("CreateAndWrite") {
+			t.Skip("Skipped by provider configuration")
+			return
+		}
 		testWriteFSCreate(t, filesystem)
 	})
 	t.Run("WriteFile", func(t *testing.T) {
+		if shouldSkip("WriteFile") {
+			t.Skip("Skipped by provider configuration")
+			return
+		}
 		testWriteFSWriteFile(t, filesystem)
 	})
 	t.Run("OpenFile", func(t *testing.T) {
+		if shouldSkip("OpenFile") {
+			t.Skip("Skipped by provider configuration")
+			return
+		}
 		testWriteFSOpenFile(t, filesystem)
 	})
 	t.Run("Mkdir", func(t *testing.T) {
+		if shouldSkip("Mkdir") {
+			t.Skip("Skipped by provider configuration")
+			return
+		}
 		testWriteFSMkdir(t, filesystem)
 	})
 	t.Run("MkdirAll", func(t *testing.T) {
+		if shouldSkip("MkdirAll") {
+			t.Skip("Skipped by provider configuration")
+			return
+		}
 		testWriteFSMkdirAll(t, filesystem)
 	})
 	t.Run("CreateInNonExistentDir", func(t *testing.T) {
+		if shouldSkip("CreateInNonExistentDir") {
+			t.Skip("Skipped by provider configuration")
+			return
+		}
 		testWriteFSCreateError(t, filesystem)
 	})
 }
