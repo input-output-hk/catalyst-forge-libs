@@ -14,6 +14,10 @@ import (
 	"time"
 
 	"github.com/input-output-hk/catalyst-forge-libs/fs/core"
+	"github.com/input-output-hk/catalyst-forge-libs/fs/minio/internal/errs"
+	"github.com/input-output-hk/catalyst-forge-libs/fs/minio/internal/pathutil"
+	"github.com/input-output-hk/catalyst-forge-libs/fs/minio/internal/types"
+	"github.com/input-output-hk/catalyst-forge-libs/fs/minio/internal/walk"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"golang.org/x/sync/errgroup"
@@ -58,7 +62,7 @@ func NewMinIO(cfg Config) (*MinioFS, error) {
 	}
 
 	// Normalize prefix: use forward slashes, trim trailing slash
-	prefix := normalizePrefix(cfg.Prefix)
+	prefix := pathutil.NormalizePrefix(cfg.Prefix)
 
 	// Set default multipart threshold if not specified
 	multipartThreshold := cfg.MultipartThreshold
@@ -81,98 +85,10 @@ func NewMinIO(cfg Config) (*MinioFS, error) {
 	}, nil
 }
 
-// normalizePrefix normalizes the prefix path:
-// - Converts backslashes to forward slashes
-// - Removes leading and trailing slashes
-// - Returns empty string if prefix is "." or empty.
-func normalizePrefix(prefix string) string {
-	if prefix == "" || prefix == "." {
-		return ""
-	}
-
-	// First convert backslashes to forward slashes (for Windows-style paths)
-	prefix = strings.ReplaceAll(prefix, "\\", "/")
-
-	// Clean the path (resolves . and ..)
-	prefix = filepath.Clean(prefix)
-
-	// Convert to forward slashes again (filepath.Clean may use OS separator)
-	prefix = filepath.ToSlash(prefix)
-
-	// Trim leading and trailing slashes
-	prefix = strings.Trim(prefix, "/")
-
-	return prefix
-}
-
-// normalize cleans a path and ensures forward slashes.
-// It applies: ToSlash → Clean → Trim slashes
-// Returns "." for empty paths.
-func normalize(path string) string {
-	if path == "" {
-		return "."
-	}
-
-	// First convert backslashes to forward slashes (for Windows-style paths)
-	path = strings.ReplaceAll(path, "\\", "/")
-
-	// Clean the path (resolves . and ..)
-	path = filepath.Clean(path)
-
-	// Convert to forward slashes again (filepath.Clean may use OS separator)
-	path = filepath.ToSlash(path)
-
-	// Trim leading and trailing slashes
-	path = strings.Trim(path, "/")
-
-	// Return "." if path is now empty
-	if path == "" {
-		return "."
-	}
-
-	return path
-}
-
 // joinPath joins the filesystem prefix with the given name.
 // It handles empty prefix correctly and uses forward slashes.
 func (m *MinioFS) joinPath(name string) string {
-	name = normalize(name)
-
-	// Handle special case where normalized name is "."
-	if name == "." {
-		if m.prefix == "" {
-			return ""
-		}
-		return m.prefix
-	}
-
-	if m.prefix == "" {
-		return name
-	}
-
-	return m.prefix + "/" + name
-}
-
-// translateError converts MinIO errors to stdlib fs errors.
-func translateError(err error) error {
-	if err == nil {
-		return nil
-	}
-
-	// Check MinIO error responses
-	errResp := minio.ToErrorResponse(err)
-
-	switch errResp.Code {
-	case "NoSuchKey":
-		return fs.ErrNotExist
-	case "NoSuchBucket":
-		return fs.ErrNotExist
-	case "AccessDenied":
-		return fs.ErrPermission
-	}
-
-	// Return wrapped error with context for other errors
-	return fmt.Errorf("minio: %w", err)
+	return pathutil.JoinPath(m.prefix, name)
 }
 
 // Stub implementations for core.FS interface
@@ -194,15 +110,15 @@ func (m *MinioFS) Stat(name string) (fs.FileInfo, error) {
 	// Use StatObject to get object metadata
 	info, err := m.client.StatObject(ctx, m.bucket, key, minio.StatObjectOptions{})
 	if err != nil {
-		return nil, &fs.PathError{Op: "stat", Path: name, Err: translateError(err)}
+		return nil, errs.PathError("stat", name, errs.Translate(err))
 	}
 
-	return &fileInfo{
-		name:    filepath.Base(name),
-		size:    info.Size,
-		modTime: info.LastModified,
-		mode:    0644,
-	}, nil
+	return types.NewFileInfo(
+		filepath.Base(name),
+		info.Size,
+		info.LastModified,
+		0644,
+	), nil
 }
 
 // ReadDir reads the directory named by name and returns a list of directory entries.
@@ -223,7 +139,7 @@ func (m *MinioFS) ReadDir(name string) ([]fs.DirEntry, error) {
 		Recursive: false, // Use delimiter for directory-like listing
 	}) {
 		if object.Err != nil {
-			return nil, &fs.PathError{Op: "readdir", Path: name, Err: translateError(object.Err)}
+			return nil, errs.PathError("readdir", name, errs.Translate(object.Err))
 		}
 
 		// Skip the directory itself if it appears as an object
@@ -246,12 +162,12 @@ func (m *MinioFS) ReadDir(name string) ([]fs.DirEntry, error) {
 		}
 
 		// For files, use object metadata
-		entries = append(entries, &s3DirEntry{
-			name:    relName,
-			isDir:   isDir,
-			size:    object.Size,
-			modTime: object.LastModified,
-		})
+		entries = append(entries, types.NewS3DirEntry(
+			relName,
+			isDir,
+			object.Size,
+			object.LastModified,
+		))
 	}
 
 	// Sort entries by name to enforce fs.ReadDir contract
@@ -271,13 +187,13 @@ func (m *MinioFS) ReadFile(name string) ([]byte, error) {
 	// Get size first to pre-allocate exact buffer size
 	info, err := m.client.StatObject(ctx, m.bucket, key, minio.StatObjectOptions{})
 	if err != nil {
-		return nil, &fs.PathError{Op: "readfile", Path: name, Err: translateError(err)}
+		return nil, errs.PathError("readfile", name, errs.Translate(err))
 	}
 
 	// Stream object directly into pre-allocated buffer
 	obj, err := m.client.GetObject(ctx, m.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
-		return nil, &fs.PathError{Op: "readfile", Path: name, Err: translateError(err)}
+		return nil, errs.PathError("readfile", name, errs.Translate(err))
 	}
 	defer func() {
 		_ = obj.Close()
@@ -287,7 +203,7 @@ func (m *MinioFS) ReadFile(name string) ([]byte, error) {
 	buf := make([]byte, info.Size)
 	_, err = io.ReadFull(obj, buf)
 	if err != nil {
-		return nil, &fs.PathError{Op: "readfile", Path: name, Err: err}
+		return nil, errs.PathError("readfile", name, err)
 	}
 
 	return buf, nil
@@ -317,16 +233,16 @@ func (m *MinioFS) Create(name string) (core.File, error) {
 func (m *MinioFS) OpenFile(name string, flag int, _ fs.FileMode) (core.File, error) {
 	// Check for unsupported flags
 	if flag&os.O_RDWR != 0 {
-		return nil, &fs.PathError{Op: "open", Path: name, Err: fmt.Errorf("%w: O_RDWR not supported in S3", core.ErrUnsupported)}
+		return nil, errs.PathErrorf("open", name, "%w: O_RDWR not supported in S3", core.ErrUnsupported)
 	}
 	if flag&os.O_APPEND != 0 {
-		return nil, &fs.PathError{Op: "open", Path: name, Err: fmt.Errorf("%w: O_APPEND not supported in S3", core.ErrUnsupported)}
+		return nil, errs.PathErrorf("open", name, "%w: O_APPEND not supported in S3", core.ErrUnsupported)
 	}
 	if flag&os.O_EXCL != 0 {
-		return nil, &fs.PathError{Op: "open", Path: name, Err: fmt.Errorf("%w: O_EXCL not supported in S3", core.ErrUnsupported)}
+		return nil, errs.PathErrorf("open", name, "%w: O_EXCL not supported in S3", core.ErrUnsupported)
 	}
 	if flag&os.O_SYNC != 0 {
-		return nil, &fs.PathError{Op: "open", Path: name, Err: fmt.Errorf("%w: O_SYNC not supported in S3", core.ErrUnsupported)}
+		return nil, errs.PathErrorf("open", name, "%w: O_SYNC not supported in S3", core.ErrUnsupported)
 	}
 
 	key := m.joinPath(name)
@@ -352,11 +268,11 @@ func (m *MinioFS) WriteFile(name string, data []byte, _ fs.FileMode) error {
 
 	_, err = file.Write(data)
 	if err != nil {
-		return &fs.PathError{Op: "writefile", Path: name, Err: err}
+		return errs.PathError("writefile", name, err)
 	}
 
 	if err := file.Close(); err != nil {
-		return &fs.PathError{Op: "writefile", Path: name, Err: err}
+		return errs.PathError("writefile", name, err)
 	}
 
 	return nil
@@ -387,7 +303,7 @@ func (m *MinioFS) Remove(name string) error {
 
 	err := m.client.RemoveObject(ctx, m.bucket, key, minio.RemoveObjectOptions{})
 	if err != nil {
-		return &fs.PathError{Op: "remove", Path: name, Err: translateError(err)}
+		return errs.PathError("remove", name, errs.Translate(err))
 	}
 
 	return nil
@@ -426,21 +342,21 @@ func (m *MinioFS) RemoveAll(path string) error {
 	errorCh := m.client.RemoveObjects(ctx, m.bucket, objectsCh, minio.RemoveObjectsOptions{})
 
 	// Collect errors from deletion
-	var errs []error
+	var errList []error
 	for err := range errorCh {
 		if err.Err != nil {
-			errs = append(errs, err.Err)
+			errList = append(errList, err.Err)
 		}
 	}
 
 	// Check for list error first
 	if listErr != nil {
-		return &fs.PathError{Op: "removeall", Path: path, Err: translateError(listErr)}
+		return errs.PathError("removeall", path, errs.Translate(listErr))
 	}
 
 	// Return first delete error if any
-	if len(errs) > 0 {
-		return &fs.PathError{Op: "removeall", Path: path, Err: translateError(errs[0])}
+	if len(errList) > 0 {
+		return errs.PathError("removeall", path, errs.Translate(errList[0]))
 	}
 
 	return nil
@@ -481,11 +397,11 @@ func (m *MinioFS) Rename(oldpath, newpath string) error {
 	// Parallel copy all objects
 	copied, err := m.parallelCopy(ctx, dirPrefix, newPrefix)
 	if err != nil {
-		return &fs.PathError{Op: "rename", Path: oldpath, Err: translateError(err)}
+		return errs.PathError("rename", oldpath, errs.Translate(err))
 	}
 
 	if len(copied) == 0 {
-		return &fs.PathError{Op: "rename", Path: oldpath, Err: fs.ErrNotExist}
+		return errs.PathError("rename", oldpath, fs.ErrNotExist)
 	}
 
 	// Batch delete old objects
@@ -501,7 +417,7 @@ func (m *MinioFS) Rename(oldpath, newpath string) error {
 	for err := range errorCh {
 		if err.Err != nil {
 			// Copy succeeded but delete failed - partial state
-			return &fs.PathError{Op: "rename", Path: oldpath, Err: translateError(err.Err)}
+			return errs.PathError("rename", oldpath, errs.Translate(err.Err))
 		}
 	}
 
@@ -524,13 +440,13 @@ func (m *MinioFS) renameFile(oldKey, newKey, oldpath string) error {
 
 	_, err := m.client.CopyObject(ctx, dst, src)
 	if err != nil {
-		return &fs.PathError{Op: "rename", Path: oldpath, Err: translateError(err)}
+		return errs.PathError("rename", oldpath, errs.Translate(err))
 	}
 
 	// Remove old object
 	err = m.client.RemoveObject(ctx, m.bucket, oldKey, minio.RemoveObjectOptions{})
 	if err != nil {
-		return &fs.PathError{Op: "rename", Path: oldpath, Err: translateError(err)}
+		return errs.PathError("rename", oldpath, errs.Translate(err))
 	}
 
 	return nil
@@ -570,11 +486,11 @@ func (m *MinioFS) Walk(root string, walkFn fs.WalkDirFunc) error {
 	firstObject, ok := <-objectsCh
 	if !ok {
 		// Channel closed without any objects - directory doesn't exist
-		return &fs.PathError{Op: "walk", Path: root, Err: fs.ErrNotExist}
+		return errs.PathError("walk", root, fs.ErrNotExist)
 	}
 
 	if firstObject.Err != nil {
-		return fmt.Errorf("walk %s: %w", root, translateError(firstObject.Err))
+		return fmt.Errorf("walk %s: %w", root, errs.Translate(firstObject.Err))
 	}
 
 	// At least one object exists with this prefix - it's a valid directory
@@ -589,10 +505,7 @@ func (m *MinioFS) walkDir(name, key string, walkFn fs.WalkDirFunc) error {
 	ctx := context.Background()
 
 	// Create a synthetic directory entry for the root
-	rootEntry := &s3DirEntry{
-		name:  filepath.Base(name),
-		isDir: true,
-	}
+	rootEntry := types.NewS3DirEntry(filepath.Base(name), true, 0, time.Time{})
 
 	// Call walkFn for the directory itself
 	if err := walkFn(name, rootEntry, nil); err != nil {
@@ -614,7 +527,7 @@ func (m *MinioFS) walkDir(name, key string, walkFn fs.WalkDirFunc) error {
 		Recursive: false,
 	}) {
 		if object.Err != nil {
-			return translateError(object.Err)
+			return errs.Translate(object.Err)
 		}
 
 		// Skip the directory marker itself
@@ -632,61 +545,22 @@ func (m *MinioFS) walkDir(name, key string, walkFn fs.WalkDirFunc) error {
 			continue
 		}
 
-		entries = append(entries, &s3DirEntry{
-			name:    relName,
-			isDir:   isDir,
-			size:    object.Size,
-			modTime: object.LastModified,
-		})
+		entries = append(entries, types.NewS3DirEntry(
+			relName,
+			isDir,
+			object.Size,
+			object.LastModified,
+		))
 	}
 
 	// Walk each entry
 	for _, entry := range entries {
-		if err := m.processWalkEntry(name, key, entry, walkFn); err != nil {
+		if err := walk.ProcessEntry(name, key, entry, walkFn, m.walkDir); err != nil {
 			return err
 		}
 	}
 
 	return nil
-}
-
-// processWalkEntry processes a single entry during directory walking.
-// This is a helper method for walkDir() to reduce complexity.
-func (m *MinioFS) processWalkEntry(parentName, parentKey string, entry fs.DirEntry, walkFn fs.WalkDirFunc) error {
-	entryPath := filepath.Join(parentName, entry.Name())
-	entryKey := buildEntryKey(parentKey, entry.Name())
-
-	if entry.IsDir() {
-		return m.processWalkDirectory(entryPath, entryKey, walkFn)
-	}
-
-	return m.processWalkFile(entryPath, entry, walkFn)
-}
-
-// buildEntryKey constructs the S3 key for an entry.
-func buildEntryKey(parentKey, entryName string) string {
-	if parentKey != "" {
-		return parentKey + "/" + entryName
-	}
-	return entryName
-}
-
-// processWalkDirectory handles walking into a subdirectory.
-func (m *MinioFS) processWalkDirectory(entryPath, entryKey string, walkFn fs.WalkDirFunc) error {
-	err := m.walkDir(entryPath, entryKey, walkFn)
-	if errors.Is(err, fs.SkipDir) {
-		return nil // Skip this directory, continue with siblings
-	}
-	return err
-}
-
-// processWalkFile handles calling walkFn for a file entry.
-func (m *MinioFS) processWalkFile(entryPath string, entry fs.DirEntry, walkFn fs.WalkDirFunc) error {
-	err := walkFn(entryPath, entry, nil)
-	if errors.Is(err, fs.SkipDir) {
-		return nil // SkipDir on a file means stop walking
-	}
-	return err
 }
 
 // Chroot returns a new filesystem rooted at dir.
@@ -703,46 +577,6 @@ func (m *MinioFS) Chroot(dir string) (core.FS, error) {
 		prefix:             newPrefix,
 		multipartThreshold: m.multipartThreshold,
 		renameConcurrency:  m.renameConcurrency,
-	}, nil
-}
-
-// s3DirEntry implements fs.DirEntry for S3 objects and virtual directories.
-type s3DirEntry struct {
-	name    string
-	isDir   bool
-	size    int64
-	modTime time.Time
-}
-
-// Name returns the name of the entry.
-func (e *s3DirEntry) Name() string {
-	return e.name
-}
-
-// IsDir reports whether the entry describes a directory.
-func (e *s3DirEntry) IsDir() bool {
-	return e.isDir
-}
-
-// Type returns the type bits for the entry.
-func (e *s3DirEntry) Type() fs.FileMode {
-	if e.isDir {
-		return fs.ModeDir
-	}
-	return 0
-}
-
-// Info returns the FileInfo for the entry.
-func (e *s3DirEntry) Info() (fs.FileInfo, error) {
-	mode := fs.FileMode(0644)
-	if e.isDir {
-		mode = fs.ModeDir | 0755
-	}
-	return &fileInfo{
-		name:    e.name,
-		size:    e.size,
-		modTime: e.modTime,
-		mode:    mode,
 	}, nil
 }
 
@@ -799,4 +633,3 @@ func (m *MinioFS) parallelCopy(ctx context.Context, oldPrefix, newPrefix string)
 
 // Compile-time interface check.
 var _ core.FS = (*MinioFS)(nil)
-var _ fs.DirEntry = (*s3DirEntry)(nil)

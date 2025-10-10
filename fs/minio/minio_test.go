@@ -6,6 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/input-output-hk/catalyst-forge-libs/fs/minio/internal/errs"
+	"github.com/input-output-hk/catalyst-forge-libs/fs/minio/internal/pathutil"
+	"github.com/input-output-hk/catalyst-forge-libs/fs/minio/internal/types"
 	"github.com/minio/minio-go/v7"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -281,7 +284,7 @@ func TestNormalizePrefix(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := normalizePrefix(tt.input)
+			result := pathutil.NormalizePrefix(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -395,7 +398,7 @@ func TestNormalize(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := normalize(tt.input)
+			result := pathutil.Normalize(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -494,10 +497,10 @@ func TestJoinPath(t *testing.T) {
 	}
 }
 
-// TestTranslateError tests the translateError function for error translation.
+// TestTranslateError tests the errs.Translate function for error translation.
 func TestTranslateError(t *testing.T) {
 	t.Run("nil error returns nil", func(t *testing.T) {
-		err := translateError(nil)
+		err := errs.Translate(nil)
 		assert.Nil(t, err)
 	})
 
@@ -506,7 +509,7 @@ func TestTranslateError(t *testing.T) {
 		minioErr := minio.ErrorResponse{
 			Code: "NoSuchKey",
 		}
-		err := translateError(minioErr)
+		err := errs.Translate(minioErr)
 		assert.ErrorIs(t, err, fs.ErrNotExist)
 	})
 
@@ -514,7 +517,7 @@ func TestTranslateError(t *testing.T) {
 		minioErr := minio.ErrorResponse{
 			Code: "NoSuchBucket",
 		}
-		err := translateError(minioErr)
+		err := errs.Translate(minioErr)
 		assert.ErrorIs(t, err, fs.ErrNotExist)
 	})
 
@@ -522,7 +525,7 @@ func TestTranslateError(t *testing.T) {
 		minioErr := minio.ErrorResponse{
 			Code: "AccessDenied",
 		}
-		err := translateError(minioErr)
+		err := errs.Translate(minioErr)
 		assert.ErrorIs(t, err, fs.ErrPermission)
 	})
 
@@ -531,7 +534,7 @@ func TestTranslateError(t *testing.T) {
 			Code:    "InternalError",
 			Message: "Something went wrong",
 		}
-		err := translateError(minioErr)
+		err := errs.Translate(minioErr)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "minio:")
 		// Should wrap the original error (contains the message)
@@ -540,7 +543,7 @@ func TestTranslateError(t *testing.T) {
 
 	t.Run("non-MinIO errors are wrapped", func(t *testing.T) {
 		originalErr := assert.AnError
-		err := translateError(originalErr)
+		err := errs.Translate(originalErr)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "minio:")
 	})
@@ -649,16 +652,11 @@ func TestOpenFileFlagValidation(t *testing.T) {
 	// since they attempt to read from storage. These are covered in integration tests.
 }
 
-// TestS3DirEntry tests the s3DirEntry implementation.
+// TestS3DirEntry tests the types.S3DirEntry implementation.
 func TestS3DirEntry(t *testing.T) {
 	t.Run("file entry", func(t *testing.T) {
 		modTime := time.Now()
-		entry := &s3DirEntry{
-			name:    "test.txt",
-			isDir:   false,
-			size:    1024,
-			modTime: modTime,
-		}
+		entry := types.NewS3DirEntry("test.txt", false, 1024, modTime)
 
 		assert.Equal(t, "test.txt", entry.Name())
 		assert.False(t, entry.IsDir())
@@ -675,12 +673,7 @@ func TestS3DirEntry(t *testing.T) {
 
 	t.Run("directory entry", func(t *testing.T) {
 		modTime := time.Now()
-		entry := &s3DirEntry{
-			name:    "subdir",
-			isDir:   true,
-			size:    0,
-			modTime: modTime,
-		}
+		entry := types.NewS3DirEntry("subdir", true, 0, modTime)
 
 		assert.Equal(t, "subdir", entry.Name())
 		assert.True(t, entry.IsDir())

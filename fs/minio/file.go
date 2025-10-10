@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/input-output-hk/catalyst-forge-libs/fs/core"
+	"github.com/input-output-hk/catalyst-forge-libs/fs/minio/internal/errs"
+	"github.com/input-output-hk/catalyst-forge-libs/fs/minio/internal/types"
 	"github.com/minio/minio-go/v7"
 )
 
@@ -60,16 +62,67 @@ func newFileWrite(mfs *MinioFS, key, name string, flag int) *File {
 // Read is only supported in read mode (O_RDONLY).
 func (f *File) Read(p []byte) (int, error) {
 	if f.mode&os.O_WRONLY != 0 {
-		return 0, &fs.PathError{Op: "read", Path: f.name, Err: fs.ErrInvalid}
+		return 0, errs.PathError("read", f.name, fs.ErrInvalid)
 	}
 	if f.reader == nil {
-		return 0, &fs.PathError{Op: "read", Path: f.name, Err: fs.ErrInvalid}
+		return 0, errs.PathError("read", f.name, fs.ErrInvalid)
 	}
 	n, err := f.reader.Read(p)
 	if err == nil || errors.Is(err, io.EOF) {
 		return n, err
 	}
-	return n, &fs.PathError{Op: "read", Path: f.name, Err: err}
+	return n, errs.PathError("read", f.name, err)
+}
+
+// getEffectiveThreshold returns the threshold for transitioning to streaming writes.
+// If the threshold is 0 or negative, returns the default 5MB.
+func (f *File) getEffectiveThreshold() int64 {
+	threshold := f.fs.multipartThreshold
+	if threshold <= 0 {
+		threshold = 5 * 1024 * 1024 // 5MB default
+	}
+	return threshold
+}
+
+// transitionToStreaming transitions from buffered writes to streaming writes.
+// It creates a pipe, starts a background upload goroutine, and flushes any existing buffer.
+// Returns the number of bytes from p that were written and any error.
+// nolint:contextcheck // Background upload by design; io.Writer.Write cannot accept context
+func (f *File) transitionToStreaming(p []byte) (int, error) {
+	pr, pw := io.Pipe()
+	f.pipeW = pw
+	f.putRes = make(chan error, 1)
+
+	go func() {
+		_, err := f.fs.client.PutObject(
+			context.Background(),
+			f.fs.bucket,
+			f.key,
+			pr,
+			-1,
+			minio.PutObjectOptions{
+				ContentType: "application/octet-stream",
+			},
+		)
+		_ = pr.Close()
+		f.putRes <- errs.Translate(err)
+		close(f.putRes)
+	}()
+
+	// Flush existing buffered data into the pipe, then discard buffer
+	if f.buffer != nil && f.buffer.Len() > 0 {
+		if _, err := f.pipeW.Write(f.buffer.Bytes()); err != nil {
+			return 0, errs.PathError("write", f.name, err)
+		}
+		f.buffer = nil
+	}
+
+	n, err := f.pipeW.Write(p)
+	f.bytesWritten += int64(n)
+	if err != nil {
+		return n, errs.PathError("write", f.name, err)
+	}
+	return n, nil
 }
 
 // Write writes len(p) bytes from p to the underlying data stream.
@@ -78,10 +131,10 @@ func (f *File) Read(p []byte) (int, error) {
 // nolint:contextcheck // io.Writer.Write signature cannot accept a context parameter
 func (f *File) Write(p []byte) (int, error) {
 	if f.closed {
-		return 0, &fs.PathError{Op: "write", Path: f.name, Err: fs.ErrClosed}
+		return 0, errs.PathError("write", f.name, fs.ErrClosed)
 	}
 	if f.mode&(os.O_WRONLY|os.O_RDWR) == 0 {
-		return 0, &fs.PathError{Op: "write", Path: f.name, Err: fs.ErrInvalid}
+		return 0, errs.PathError("write", f.name, fs.ErrInvalid)
 	}
 
 	// If already streaming, write directly to pipe
@@ -89,23 +142,19 @@ func (f *File) Write(p []byte) (int, error) {
 		n, err := f.pipeW.Write(p)
 		f.bytesWritten += int64(n)
 		if err != nil {
-			return n, &fs.PathError{Op: "write", Path: f.name, Err: err}
+			return n, errs.PathError("write", f.name, err)
 		}
 		return n, nil
 	}
 
-	// Determine effective threshold: treat 0 as default 5MB
-	threshold := f.fs.multipartThreshold
-	if threshold <= 0 {
-		threshold = 5 * 1024 * 1024
-	}
+	threshold := f.getEffectiveThreshold()
 
 	// If buffer plus incoming payload stays under threshold, keep buffering
 	if f.buffer != nil && int64(f.buffer.Len()+len(p)) <= threshold {
 		n, err := f.buffer.Write(p)
 		f.bytesWritten += int64(n)
 		if err != nil {
-			return n, &fs.PathError{Op: "write", Path: f.name, Err: err}
+			return n, errs.PathError("write", f.name, err)
 		}
 		return n, nil
 	}
@@ -120,56 +169,22 @@ func (f *File) Write(p []byte) (int, error) {
 		return n, err
 	}
 
-	// Transition to streaming: create pipe and start background upload
-	pr, pw := io.Pipe()
-	f.pipeW = pw
-	f.putRes = make(chan error, 1)
-
-	go func() {
-		// nolint:contextcheck // io.Writer.Write cannot accept context; using background upload by design
-		_, err := f.fs.client.PutObject(
-			context.Background(),
-			f.fs.bucket,
-			f.key,
-			pr,
-			-1,
-			minio.PutObjectOptions{
-				ContentType: "application/octet-stream",
-			},
-		)
-		_ = pr.Close()
-		f.putRes <- translateError(err)
-		close(f.putRes)
-	}()
-
-	// Flush existing buffered data into the pipe, then discard buffer
-	if f.buffer != nil && f.buffer.Len() > 0 {
-		if _, err := f.pipeW.Write(f.buffer.Bytes()); err != nil {
-			return 0, &fs.PathError{Op: "write", Path: f.name, Err: err}
-		}
-		f.buffer = nil
-	}
-
-	n, err := f.pipeW.Write(p)
-	f.bytesWritten += int64(n)
-	if err != nil {
-		return n, &fs.PathError{Op: "write", Path: f.name, Err: err}
-	}
-	return n, nil
+	// Transition to streaming
+	return f.transitionToStreaming(p)
 }
 
 // Seek sets the offset for the next Read operation. It returns the new offset
 // and an error, if any. Seek is only supported in read mode.
 func (f *File) Seek(offset int64, whence int) (int64, error) {
 	if f.mode&os.O_WRONLY != 0 {
-		return 0, &fs.PathError{Op: "seek", Path: f.name, Err: core.ErrUnsupported}
+		return 0, errs.PathError("seek", f.name, core.ErrUnsupported)
 	}
 	if f.reader == nil {
-		return 0, &fs.PathError{Op: "seek", Path: f.name, Err: fs.ErrInvalid}
+		return 0, errs.PathError("seek", f.name, fs.ErrInvalid)
 	}
 	pos, err := f.reader.Seek(offset, whence)
 	if err != nil {
-		return pos, &fs.PathError{Op: "seek", Path: f.name, Err: err}
+		return pos, errs.PathError("seek", f.name, err)
 	}
 	return pos, nil
 }
@@ -179,14 +194,14 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 // ReadAt is only supported in read mode.
 func (f *File) ReadAt(p []byte, off int64) (int, error) {
 	if f.mode&os.O_WRONLY != 0 {
-		return 0, &fs.PathError{Op: "readat", Path: f.name, Err: core.ErrUnsupported}
+		return 0, errs.PathError("readat", f.name, core.ErrUnsupported)
 	}
 	if f.reader == nil {
-		return 0, &fs.PathError{Op: "readat", Path: f.name, Err: fs.ErrInvalid}
+		return 0, errs.PathError("readat", f.name, fs.ErrInvalid)
 	}
 	n, err := f.reader.ReadAt(p, off)
 	if err != nil && !errors.Is(err, io.EOF) {
-		return n, &fs.PathError{Op: "readat", Path: f.name, Err: err}
+		return n, errs.PathError("readat", f.name, err)
 	}
 	return n, err
 }
@@ -197,20 +212,10 @@ func (f *File) ReadAt(p []byte, off int64) (int, error) {
 func (f *File) Stat() (fs.FileInfo, error) {
 	if f.mode&os.O_WRONLY != 0 {
 		// Write mode: return bytes written so far
-		return &fileInfo{
-			name:    f.name,
-			size:    f.bytesWritten,
-			modTime: time.Now(),
-			mode:    0644,
-		}, nil
+		return types.NewFileInfo(f.name, f.bytesWritten, time.Now(), 0644), nil
 	}
 	// Read mode: return downloaded object info
-	return &fileInfo{
-		name:    f.name,
-		size:    f.size,
-		modTime: f.modTime,
-		mode:    0644,
-	}, nil
+	return types.NewFileInfo(f.name, f.size, f.modTime, 0644), nil
 }
 
 // Close closes the file, releasing any resources.
@@ -228,7 +233,7 @@ func (f *File) Close() error {
 		if f.pipeW != nil && f.putRes != nil {
 			_ = f.pipeW.Close()
 			if err := <-f.putRes; err != nil {
-				return &fs.PathError{Op: "close", Path: f.name, Err: err}
+				return errs.PathError("close", f.name, err)
 			}
 			return nil
 		}
@@ -274,7 +279,7 @@ func (f *File) sync(ctx context.Context) error {
 		},
 	)
 	if err != nil {
-		return translateError(err)
+		return errs.Translate(err)
 	}
 
 	return nil
@@ -284,21 +289,6 @@ func (f *File) sync(ctx context.Context) error {
 func (f *File) Name() string {
 	return f.name
 }
-
-// fileInfo implements fs.FileInfo for MinIO objects.
-type fileInfo struct {
-	name    string
-	size    int64
-	modTime time.Time
-	mode    fs.FileMode
-}
-
-func (fi *fileInfo) Name() string       { return fi.name }
-func (fi *fileInfo) Size() int64        { return fi.size }
-func (fi *fileInfo) Mode() fs.FileMode  { return fi.mode }
-func (fi *fileInfo) ModTime() time.Time { return fi.modTime }
-func (fi *fileInfo) IsDir() bool        { return fi.mode&fs.ModeDir != 0 }
-func (fi *fileInfo) Sys() interface{}   { return nil }
 
 // streamingFile provides streaming reads without buffering entire objects.
 // This type is used for read operations to minimize memory usage.
@@ -318,13 +308,13 @@ func newStreamingFile(ctx context.Context, mfs *MinioFS, key, name string) (*str
 	// First get metadata using StatObject (doesn't open a stream)
 	info, err := mfs.client.StatObject(ctx, mfs.bucket, key, minio.StatObjectOptions{})
 	if err != nil {
-		return nil, &fs.PathError{Op: "open", Path: name, Err: translateError(err)}
+		return nil, errs.PathError("open", name, errs.Translate(err))
 	}
 
 	// Then get the object for streaming
 	obj, err := mfs.client.GetObject(ctx, mfs.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
-		return nil, &fs.PathError{Op: "open", Path: name, Err: translateError(err)}
+		return nil, errs.PathError("open", name, errs.Translate(err))
 	}
 
 	return &streamingFile{
@@ -341,7 +331,7 @@ func newStreamingFile(ctx context.Context, mfs *MinioFS, key, name string) (*str
 // Read reads up to len(p) bytes into p from the streaming object.
 func (f *streamingFile) Read(p []byte) (int, error) {
 	if f.closed {
-		return 0, &fs.PathError{Op: "read", Path: f.name, Err: fs.ErrClosed}
+		return 0, errs.PathError("read", f.name, fs.ErrClosed)
 	}
 	n, err := f.obj.Read(p)
 	f.offset += int64(n)
@@ -365,12 +355,12 @@ func (f *streamingFile) Close() error {
 
 // Stat returns file information for the streaming file.
 func (f *streamingFile) Stat() (fs.FileInfo, error) {
-	return &fileInfo{
-		name:    filepath.Base(f.name),
-		size:    f.info.Size,
-		modTime: f.info.LastModified,
-		mode:    0644,
-	}, nil
+	return types.NewFileInfo(
+		filepath.Base(f.name),
+		f.info.Size,
+		f.info.LastModified,
+		0644,
+	), nil
 }
 
 // Name returns the name of the file.
@@ -380,14 +370,14 @@ func (f *streamingFile) Name() string {
 
 // Write is not supported for read-only streaming files.
 func (f *streamingFile) Write(_ []byte) (int, error) {
-	return 0, &fs.PathError{Op: "write", Path: f.name, Err: fs.ErrInvalid}
+	return 0, errs.PathError("write", f.name, fs.ErrInvalid)
 }
 
 // Seek sets the read position for the next Read operation.
 // It reopens the object with a range request starting at the new offset.
 func (f *streamingFile) Seek(offset int64, whence int) (int64, error) {
 	if f.closed {
-		return 0, &fs.PathError{Op: "seek", Path: f.name, Err: fs.ErrClosed}
+		return 0, errs.PathError("seek", f.name, fs.ErrClosed)
 	}
 
 	var newOffset int64
@@ -399,11 +389,11 @@ func (f *streamingFile) Seek(offset int64, whence int) (int64, error) {
 	case io.SeekEnd:
 		newOffset = f.info.Size + offset
 	default:
-		return 0, &fs.PathError{Op: "seek", Path: f.name, Err: fs.ErrInvalid}
+		return 0, errs.PathError("seek", f.name, fs.ErrInvalid)
 	}
 
 	if newOffset < 0 {
-		return 0, &fs.PathError{Op: "seek", Path: f.name, Err: fs.ErrInvalid}
+		return 0, errs.PathError("seek", f.name, fs.ErrInvalid)
 	}
 
 	// If seeking to current position, no need to reopen
@@ -418,14 +408,14 @@ func (f *streamingFile) Seek(offset int64, whence int) (int64, error) {
 	opts := minio.GetObjectOptions{}
 	if newOffset > 0 {
 		if err := opts.SetRange(newOffset, 0); err != nil {
-			return 0, &fs.PathError{Op: "seek", Path: f.name, Err: err}
+			return 0, errs.PathError("seek", f.name, err)
 		}
 	}
 
 	// nolint:contextcheck // fs.File.Seek cannot accept context; using background context
 	obj, err := f.fs.client.GetObject(context.Background(), f.fs.bucket, f.key, opts)
 	if err != nil {
-		return 0, &fs.PathError{Op: "seek", Path: f.name, Err: translateError(err)}
+		return 0, errs.PathError("seek", f.name, errs.Translate(err))
 	}
 
 	f.obj = obj
@@ -437,23 +427,23 @@ func (f *streamingFile) Seek(offset int64, whence int) (int64, error) {
 // It uses HTTP range requests for efficient random access.
 func (f *streamingFile) ReadAt(p []byte, off int64) (int, error) {
 	if f.closed {
-		return 0, &fs.PathError{Op: "readat", Path: f.name, Err: fs.ErrClosed}
+		return 0, errs.PathError("readat", f.name, fs.ErrClosed)
 	}
 
 	if off < 0 {
-		return 0, &fs.PathError{Op: "readat", Path: f.name, Err: fs.ErrInvalid}
+		return 0, errs.PathError("readat", f.name, fs.ErrInvalid)
 	}
 
 	// Use a dedicated range request for ReadAt (doesn't affect main stream position)
 	opts := minio.GetObjectOptions{}
 	if err := opts.SetRange(off, off+int64(len(p))-1); err != nil {
-		return 0, &fs.PathError{Op: "readat", Path: f.name, Err: err}
+		return 0, errs.PathError("readat", f.name, err)
 	}
 
 	// nolint:contextcheck // fs.File.ReadAt cannot accept context; using background context
 	obj, err := f.fs.client.GetObject(context.Background(), f.fs.bucket, f.key, opts)
 	if err != nil {
-		return 0, &fs.PathError{Op: "readat", Path: f.name, Err: translateError(err)}
+		return 0, errs.PathError("readat", f.name, errs.Translate(err))
 	}
 	defer func() {
 		_ = obj.Close()

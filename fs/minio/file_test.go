@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/input-output-hk/catalyst-forge-libs/fs/core"
+	"github.com/input-output-hk/catalyst-forge-libs/fs/minio/internal/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -365,15 +366,10 @@ func TestFileSync(t *testing.T) {
 	})
 }
 
-// TestFileInfo tests the fileInfo implementation.
+// TestFileInfo tests the types.FileInfo implementation.
 func TestFileInfo(t *testing.T) {
 	modTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
-	info := &fileInfo{
-		name:    "test.txt",
-		size:    1024,
-		modTime: modTime,
-		mode:    0644,
-	}
+	info := types.NewFileInfo("test.txt", 1024, modTime, 0644)
 
 	assert.Equal(t, "test.txt", info.Name())
 	assert.Equal(t, int64(1024), info.Size())
