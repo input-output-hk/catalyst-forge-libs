@@ -12,7 +12,13 @@ import (
 
 // TestReadFS tests read-only operations: Open, Stat, ReadDir, ReadFile.
 // Assumes fs is pre-populated with test data structure.
+// Uses POSIXTestConfig() by default.
 func TestReadFS(t *testing.T, filesystem core.FS) {
+	TestReadFSWithConfig(t, filesystem, POSIXTestConfig())
+}
+
+// TestReadFSWithConfig tests read-only operations with behavior configuration.
+func TestReadFSWithConfig(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Setup: Create test data structure
 	testContent := []byte("test file content")
 
@@ -27,36 +33,36 @@ func TestReadFS(t *testing.T, filesystem core.FS) {
 
 	// Run all subtests
 	t.Run("Open", func(t *testing.T) {
-		testReadFSOpen(t, filesystem, testContent)
+		testReadFSOpen(t, filesystem, testContent, config)
 	})
 	t.Run("StatFile", func(t *testing.T) {
-		testReadFSStatFile(t, filesystem, testContent)
+		testReadFSStatFile(t, filesystem, testContent, config)
 	})
 	t.Run("StatDir", func(t *testing.T) {
-		testReadFSStatDir(t, filesystem)
+		testReadFSStatDir(t, filesystem, config)
 	})
 	t.Run("ReadDir", func(t *testing.T) {
-		testReadFSReadDir(t, filesystem)
+		testReadFSReadDir(t, filesystem, config)
 	})
 	t.Run("ReadFile", func(t *testing.T) {
-		testReadFSReadFile(t, filesystem, testContent)
+		testReadFSReadFile(t, filesystem, testContent, config)
 	})
 	t.Run("OpenNotExist", func(t *testing.T) {
-		testReadFSOpenNotExist(t, filesystem)
+		testReadFSOpenNotExist(t, filesystem, config)
 	})
 	t.Run("ExistsFile", func(t *testing.T) {
-		testReadFSExistsFile(t, filesystem)
+		testReadFSExistsFile(t, filesystem, config)
 	})
 	t.Run("ExistsDir", func(t *testing.T) {
-		testReadFSExistsDir(t, filesystem)
+		testReadFSExistsDir(t, filesystem, config)
 	})
 	t.Run("ExistsNotExist", func(t *testing.T) {
-		testReadFSExistsNotExist(t, filesystem)
+		testReadFSExistsNotExist(t, filesystem, config)
 	})
 }
 
 // testReadFSOpen tests Open() on existing file and reads contents.
-func testReadFSOpen(t *testing.T, filesystem core.FS, testContent []byte) {
+func testReadFSOpen(t *testing.T, filesystem core.FS, testContent []byte, config FSTestConfig) {
 	f, err := filesystem.Open("testdir/testfile.txt")
 	if err != nil {
 		t.Errorf("Open(%q): got error %v, want nil", "testdir/testfile.txt", err)
@@ -84,7 +90,7 @@ func testReadFSOpen(t *testing.T, filesystem core.FS, testContent []byte) {
 }
 
 // testReadFSStatFile tests Stat() on file.
-func testReadFSStatFile(t *testing.T, filesystem core.FS, testContent []byte) {
+func testReadFSStatFile(t *testing.T, filesystem core.FS, testContent []byte, config FSTestConfig) {
 	info, err := filesystem.Stat("testdir/testfile.txt")
 	if err != nil {
 		t.Errorf("Stat(%q): got error %v, want nil", "testdir/testfile.txt", err)
@@ -99,7 +105,13 @@ func testReadFSStatFile(t *testing.T, filesystem core.FS, testContent []byte) {
 }
 
 // testReadFSStatDir tests Stat() on directory.
-func testReadFSStatDir(t *testing.T, filesystem core.FS) {
+func testReadFSStatDir(t *testing.T, filesystem core.FS, config FSTestConfig) {
+	// Skip if filesystem has virtual directories (S3-like)
+	if config.VirtualDirectories {
+		t.Skip("Skipping directory Stat test - filesystem has virtual directories")
+		return
+	}
+
 	info, err := filesystem.Stat("testdir")
 	if err != nil {
 		t.Errorf("Stat(%q): got error %v, want nil", "testdir", err)
@@ -111,7 +123,7 @@ func testReadFSStatDir(t *testing.T, filesystem core.FS) {
 }
 
 // testReadFSReadDir tests ReadDir() on directory with files.
-func testReadFSReadDir(t *testing.T, filesystem core.FS) {
+func testReadFSReadDir(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	entries, err := filesystem.ReadDir("testdir")
 	if err != nil {
 		t.Errorf("ReadDir(%q): got error %v, want nil", "testdir", err)
@@ -130,7 +142,7 @@ func testReadFSReadDir(t *testing.T, filesystem core.FS) {
 }
 
 // testReadFSReadFile tests ReadFile() entire contents.
-func testReadFSReadFile(t *testing.T, filesystem core.FS, testContent []byte) {
+func testReadFSReadFile(t *testing.T, filesystem core.FS, testContent []byte, config FSTestConfig) {
 	data, err := filesystem.ReadFile("testdir/testfile.txt")
 	if err != nil {
 		t.Errorf("ReadFile(%q): got error %v, want nil", "testdir/testfile.txt", err)
@@ -142,7 +154,7 @@ func testReadFSReadFile(t *testing.T, filesystem core.FS, testContent []byte) {
 }
 
 // testReadFSOpenNotExist tests Open() non-existent file returns fs.ErrNotExist.
-func testReadFSOpenNotExist(t *testing.T, filesystem core.FS) {
+func testReadFSOpenNotExist(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	_, err := filesystem.Open("nonexistent")
 	if !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("Open(%q): got error %v, want fs.ErrNotExist", "nonexistent", err)
@@ -150,7 +162,7 @@ func testReadFSOpenNotExist(t *testing.T, filesystem core.FS) {
 }
 
 // testReadFSExistsFile tests Exists() returns true for existing file.
-func testReadFSExistsFile(t *testing.T, filesystem core.FS) {
+func testReadFSExistsFile(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	exists, err := filesystem.Exists("testdir/testfile.txt")
 	if err != nil {
 		t.Errorf("Exists(%q): got error %v, want nil", "testdir/testfile.txt", err)
@@ -162,7 +174,13 @@ func testReadFSExistsFile(t *testing.T, filesystem core.FS) {
 }
 
 // testReadFSExistsDir tests Exists() returns true for existing directory.
-func testReadFSExistsDir(t *testing.T, filesystem core.FS) {
+func testReadFSExistsDir(t *testing.T, filesystem core.FS, config FSTestConfig) {
+	// Skip if filesystem has virtual directories (S3-like)
+	if config.VirtualDirectories {
+		t.Skip("Skipping directory Exists test - filesystem has virtual directories")
+		return
+	}
+
 	exists, err := filesystem.Exists("testdir")
 	if err != nil {
 		t.Errorf("Exists(%q): got error %v, want nil", "testdir", err)
@@ -174,7 +192,7 @@ func testReadFSExistsDir(t *testing.T, filesystem core.FS) {
 }
 
 // testReadFSExistsNotExist tests Exists() returns false for non-existent path.
-func testReadFSExistsNotExist(t *testing.T, filesystem core.FS) {
+func testReadFSExistsNotExist(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	exists, err := filesystem.Exists("nonexistent")
 	if err != nil {
 		t.Errorf("Exists(%q): got error %v, want nil", "nonexistent", err)

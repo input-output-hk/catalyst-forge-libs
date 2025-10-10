@@ -11,30 +11,36 @@ import (
 
 // TestManageFS tests file management: Remove, RemoveAll, Rename.
 // Tests deletion and renaming of files and directories.
+// Uses POSIXTestConfig() by default.
 func TestManageFS(t *testing.T, filesystem core.FS) {
+	TestManageFSWithConfig(t, filesystem, POSIXTestConfig())
+}
+
+// TestManageFSWithConfig tests file management with behavior configuration.
+func TestManageFSWithConfig(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Run all subtests
 	t.Run("RemoveSingleFile", func(t *testing.T) {
-		testManageFSRemoveFile(t, filesystem)
+		testManageFSRemoveFile(t, filesystem, config)
 	})
 	t.Run("RemoveEmptyDirectory", func(t *testing.T) {
-		testManageFSRemoveEmptyDir(t, filesystem)
+		testManageFSRemoveEmptyDir(t, filesystem, config)
 	})
 	t.Run("RemoveAll", func(t *testing.T) {
-		testManageFSRemoveAll(t, filesystem)
+		testManageFSRemoveAll(t, filesystem, config)
 	})
 	t.Run("RenameFile", func(t *testing.T) {
-		testManageFSRenameFile(t, filesystem)
+		testManageFSRenameFile(t, filesystem, config)
 	})
 	t.Run("RenameDirectory", func(t *testing.T) {
-		testManageFSRenameDir(t, filesystem)
+		testManageFSRenameDir(t, filesystem, config)
 	})
 	t.Run("RemoveNotExist", func(t *testing.T) {
-		testManageFSRemoveNotExist(t, filesystem)
+		testManageFSRemoveNotExist(t, filesystem, config)
 	})
 }
 
 // testManageFSRemoveFile tests Remove() single file deletion.
-func testManageFSRemoveFile(t *testing.T, filesystem core.FS) {
+func testManageFSRemoveFile(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Setup: Create a test file
 	testData := []byte("test file content")
 	if err := filesystem.WriteFile("testfile.txt", testData, 0644); err != nil {
@@ -59,19 +65,22 @@ func testManageFSRemoveFile(t *testing.T, filesystem core.FS) {
 }
 
 // testManageFSRemoveEmptyDir tests Remove() empty directory deletion.
-func testManageFSRemoveEmptyDir(t *testing.T, filesystem core.FS) {
+func testManageFSRemoveEmptyDir(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Setup: Create an empty directory
 	if err := filesystem.Mkdir("emptydir", 0755); err != nil {
 		t.Fatalf("Mkdir(emptydir): setup failed: %v", err)
 	}
 
-	// Verify directory exists before removal
-	info, err := filesystem.Stat("emptydir")
-	if err != nil {
-		t.Fatalf("Stat(emptydir): directory should exist before removal: %v", err)
-	}
-	if !info.IsDir() {
-		t.Fatalf("Stat(emptydir): should be a directory")
+	// Skip Stat verification if filesystem has virtual directories
+	if !config.VirtualDirectories {
+		// Verify directory exists before removal (only for non-virtual dirs)
+		info, err := filesystem.Stat("emptydir")
+		if err != nil {
+			t.Fatalf("Stat(emptydir): directory should exist before removal: %v", err)
+		}
+		if !info.IsDir() {
+			t.Fatalf("Stat(emptydir): should be a directory")
+		}
 	}
 
 	// Remove the empty directory
@@ -80,14 +89,14 @@ func testManageFSRemoveEmptyDir(t *testing.T, filesystem core.FS) {
 	}
 
 	// Verify directory no longer exists
-	_, err = filesystem.Stat("emptydir")
+	_, err := filesystem.Stat("emptydir")
 	if !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("Stat(emptydir) after Remove: got error %v, want fs.ErrNotExist", err)
 	}
 }
 
 // testManageFSRemoveAll tests RemoveAll() recursive deletion.
-func testManageFSRemoveAll(t *testing.T, filesystem core.FS) {
+func testManageFSRemoveAll(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Setup: Create a directory tree with files
 	if err := filesystem.MkdirAll("parent/child1", 0755); err != nil {
 		t.Fatalf("MkdirAll(parent/child1): setup failed: %v", err)
@@ -102,13 +111,16 @@ func testManageFSRemoveAll(t *testing.T, filesystem core.FS) {
 		t.Fatalf("WriteFile(parent/child1/file2.txt): setup failed: %v", err)
 	}
 
-	// Verify parent directory exists before removal
-	info, err := filesystem.Stat("parent")
-	if err != nil {
-		t.Fatalf("Stat(parent): directory should exist before removal: %v", err)
-	}
-	if !info.IsDir() {
-		t.Fatalf("Stat(parent): should be a directory")
+	// Skip Stat verification if filesystem has virtual directories
+	if !config.VirtualDirectories {
+		// Verify parent directory exists before removal (only for non-virtual dirs)
+		info, err := filesystem.Stat("parent")
+		if err != nil {
+			t.Fatalf("Stat(parent): directory should exist before removal: %v", err)
+		}
+		if !info.IsDir() {
+			t.Fatalf("Stat(parent): should be a directory")
+		}
 	}
 
 	// Remove the entire directory tree
@@ -117,7 +129,7 @@ func testManageFSRemoveAll(t *testing.T, filesystem core.FS) {
 	}
 
 	// Verify parent directory and all children no longer exist
-	_, err = filesystem.Stat("parent")
+	_, err := filesystem.Stat("parent")
 	if !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("Stat(parent) after RemoveAll: got error %v, want fs.ErrNotExist", err)
 	}
@@ -130,7 +142,7 @@ func testManageFSRemoveAll(t *testing.T, filesystem core.FS) {
 }
 
 // testManageFSRenameFile tests Rename() file.
-func testManageFSRenameFile(t *testing.T, filesystem core.FS) {
+func testManageFSRenameFile(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Setup: Create a test file
 	testData := []byte("test file for rename")
 	if err := filesystem.WriteFile("oldfile.txt", testData, 0644); err != nil {
@@ -165,7 +177,7 @@ func testManageFSRenameFile(t *testing.T, filesystem core.FS) {
 }
 
 // testManageFSRenameDir tests Rename() directory.
-func testManageFSRenameDir(t *testing.T, filesystem core.FS) {
+func testManageFSRenameDir(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Setup: Create a directory with a file inside
 	if err := filesystem.Mkdir("olddir", 0755); err != nil {
 		t.Fatalf("Mkdir(olddir): setup failed: %v", err)
@@ -175,13 +187,16 @@ func testManageFSRenameDir(t *testing.T, filesystem core.FS) {
 		t.Fatalf("WriteFile(olddir/testfile.txt): setup failed: %v", err)
 	}
 
-	// Verify old directory exists
-	info, err := filesystem.Stat("olddir")
-	if err != nil {
-		t.Fatalf("Stat(olddir): directory should exist before rename: %v", err)
-	}
-	if !info.IsDir() {
-		t.Fatalf("Stat(olddir): should be a directory")
+	// Skip Stat verification if filesystem has virtual directories
+	if !config.VirtualDirectories {
+		// Verify old directory exists (only for non-virtual dirs)
+		info, err := filesystem.Stat("olddir")
+		if err != nil {
+			t.Fatalf("Stat(olddir): directory should exist before rename: %v", err)
+		}
+		if !info.IsDir() {
+			t.Fatalf("Stat(olddir): should be a directory")
+		}
 	}
 
 	// Rename the directory
@@ -190,19 +205,22 @@ func testManageFSRenameDir(t *testing.T, filesystem core.FS) {
 	}
 
 	// Verify old directory no longer exists
-	_, err = filesystem.Stat("olddir")
+	_, err := filesystem.Stat("olddir")
 	if !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("Stat(olddir) after Rename: got error %v, want fs.ErrNotExist", err)
 	}
 
-	// Verify new directory exists
-	info, err = filesystem.Stat("newdir")
-	if err != nil {
-		t.Errorf("Stat(newdir) after Rename: got error %v, want nil", err)
-		return
-	}
-	if !info.IsDir() {
-		t.Errorf("Stat(newdir) after Rename: IsDir() = false, want true")
+	// Skip new directory Stat if virtual directories
+	if !config.VirtualDirectories {
+		// Verify new directory exists (only for non-virtual dirs)
+		info, err := filesystem.Stat("newdir")
+		if err != nil {
+			t.Errorf("Stat(newdir) after Rename: got error %v, want nil", err)
+			return
+		}
+		if !info.IsDir() {
+			t.Errorf("Stat(newdir) after Rename: IsDir() = false, want true")
+		}
 	}
 
 	// Verify file inside renamed directory still exists with correct content
@@ -217,7 +235,13 @@ func testManageFSRenameDir(t *testing.T, filesystem core.FS) {
 }
 
 // testManageFSRemoveNotExist tests error case: Remove non-existent file returns fs.ErrNotExist.
-func testManageFSRemoveNotExist(t *testing.T, filesystem core.FS) {
+func testManageFSRemoveNotExist(t *testing.T, filesystem core.FS, config FSTestConfig) {
+	// Skip if filesystem has idempotent delete (S3-like)
+	if config.IdempotentDelete {
+		t.Skip("Skipping Remove non-existent test - filesystem has idempotent delete")
+		return
+	}
+
 	// Try to remove a non-existent file
 	err := filesystem.Remove("nonexistent.txt")
 	if !errors.Is(err, fs.ErrNotExist) {

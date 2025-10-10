@@ -11,24 +11,30 @@ import (
 
 // TestChrootFS tests scoped filesystem views and boundary enforcement.
 // Verifies chroot prevents path traversal attacks.
+// Uses POSIXTestConfig() by default.
 func TestChrootFS(t *testing.T, filesystem core.FS) {
+	TestChrootFSWithConfig(t, filesystem, POSIXTestConfig())
+}
+
+// TestChrootFSWithConfig tests scoped filesystem views with behavior configuration.
+func TestChrootFSWithConfig(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Run all subtests
 	t.Run("ChrootToSubdirectory", func(t *testing.T) {
-		testChrootFSBasic(t, filesystem)
+		testChrootFSBasic(t, filesystem, config)
 	})
 	t.Run("PathTraversalPrevention", func(t *testing.T) {
-		testChrootFSPathTraversal(t, filesystem)
+		testChrootFSPathTraversal(t, filesystem, config)
 	})
 	t.Run("ChrootOnChroot", func(t *testing.T) {
-		testChrootFSNested(t, filesystem)
+		testChrootFSNested(t, filesystem, config)
 	})
 	t.Run("SpecialCharactersAndNormalization", func(t *testing.T) {
-		testChrootFSSpecialChars(t, filesystem)
+		testChrootFSSpecialChars(t, filesystem, config)
 	})
 }
 
 // testChrootFSBasic tests Chroot() to subdirectory and verifies operations stay within boundary.
-func testChrootFSBasic(t *testing.T, filesystem core.FS) {
+func testChrootFSBasic(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Setup: Create directory structure
 	// root/
 	//   chroot-dir/
@@ -91,7 +97,7 @@ func testChrootFSBasic(t *testing.T, filesystem core.FS) {
 }
 
 // testChrootFSPathTraversal tests that path traversal attacks via ".." fail securely.
-func testChrootFSPathTraversal(t *testing.T, filesystem core.FS) {
+func testChrootFSPathTraversal(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Setup: Create directory structure with sensitive file outside
 	// root/
 	//   sandbox/
@@ -162,9 +168,9 @@ func testChrootFSPathTraversal(t *testing.T, filesystem core.FS) {
 }
 
 // testChrootFSNested tests that chroot on chroot works correctly.
-func testChrootFSNested(t *testing.T, filesystem core.FS) {
+func testChrootFSNested(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Setup: Create nested directory structure
-	setupNestedChrootStructure(t, filesystem)
+	setupNestedChrootStructure(t, filesystem, config)
 
 	// Test first level chroot
 	chroot1 := testNestedChrootLevel1(t, filesystem)
@@ -177,7 +183,7 @@ func testChrootFSNested(t *testing.T, filesystem core.FS) {
 }
 
 // setupNestedChrootStructure creates the directory structure for nested chroot tests.
-func setupNestedChrootStructure(t *testing.T, filesystem core.FS) {
+func setupNestedChrootStructure(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// root/
 	//   level1/
 	//     level2/
@@ -284,9 +290,9 @@ func testNestedChrootLevel3(t *testing.T, filesystem core.FS, chroot2 core.FS) {
 }
 
 // testChrootFSSpecialChars tests special characters and path normalization.
-func testChrootFSSpecialChars(t *testing.T, filesystem core.FS) {
+func testChrootFSSpecialChars(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Setup: Create directory structure with various path scenarios
-	setupSpecialCharsStructure(t, filesystem)
+	setupSpecialCharsStructure(t, filesystem, config)
 
 	// Chroot to testdir
 	chrootFS, err := filesystem.Chroot("testdir")
@@ -303,7 +309,7 @@ func testChrootFSSpecialChars(t *testing.T, filesystem core.FS) {
 }
 
 // setupSpecialCharsStructure creates the directory structure for special chars tests.
-func setupSpecialCharsStructure(t *testing.T, filesystem core.FS) {
+func setupSpecialCharsStructure(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	if err := filesystem.MkdirAll("testdir/subdir", 0755); err != nil {
 		t.Fatalf("MkdirAll(testdir/subdir): setup failed: %v", err)
 	}

@@ -12,7 +12,13 @@ import (
 
 // TestMetadataFS tests metadata operations (Lstat, Chmod, Chtimes).
 // Uses type assertion - skips if fs doesn't implement core.MetadataFS.
+// Uses POSIXTestConfig() by default.
 func TestMetadataFS(t *testing.T, filesystem core.FS) {
+	TestMetadataFSWithConfig(t, filesystem, POSIXTestConfig())
+}
+
+// TestMetadataFSWithConfig tests metadata operations with behavior configuration.
+func TestMetadataFSWithConfig(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Type assert to check if filesystem supports MetadataFS
 	mfs, ok := filesystem.(core.MetadataFS)
 	if !ok {

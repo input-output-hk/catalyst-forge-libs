@@ -9,24 +9,30 @@ import (
 
 // TestWalkFS tests directory tree traversal with Walk.
 // Verifies correct ordering and path handling.
+// Uses POSIXTestConfig() by default.
 func TestWalkFS(t *testing.T, filesystem core.FS) {
+	TestWalkFSWithConfig(t, filesystem, POSIXTestConfig())
+}
+
+// TestWalkFSWithConfig tests directory tree traversal with behavior configuration.
+func TestWalkFSWithConfig(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Run all subtests
 	t.Run("SimpleTree", func(t *testing.T) {
-		testWalkFSSimpleTree(t, filesystem)
+		testWalkFSSimpleTree(t, filesystem, config)
 	})
 	t.Run("WithSubdirectories", func(t *testing.T) {
-		testWalkFSWithSubdirectories(t, filesystem)
+		testWalkFSWithSubdirectories(t, filesystem, config)
 	})
 	t.Run("EmptyDirectory", func(t *testing.T) {
-		testWalkFSEmptyDirectory(t, filesystem)
+		testWalkFSEmptyDirectory(t, filesystem, config)
 	})
 	t.Run("PathHandling", func(t *testing.T) {
-		testWalkFSPathHandling(t, filesystem)
+		testWalkFSPathHandling(t, filesystem, config)
 	})
 }
 
 // testWalkFSSimpleTree tests Walk() on a simple directory tree.
-func testWalkFSSimpleTree(t *testing.T, filesystem core.FS) {
+func testWalkFSSimpleTree(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Setup: Create a simple directory with files
 	if err := filesystem.Mkdir("walktest", 0755); err != nil {
 		t.Fatalf("Mkdir(walktest): setup failed: %v", err)
@@ -53,23 +59,50 @@ func testWalkFSSimpleTree(t *testing.T, filesystem core.FS) {
 	}
 
 	// Verify all paths were visited
-	// Walk should visit: walktest (dir), walktest/file1.txt, walktest/file2.txt
-	// The order should be lexical: directory first, then files in lexical order
-	expectedPaths := []string{"walktest", "walktest/file1.txt", "walktest/file2.txt"}
-	if len(visited) != len(expectedPaths) {
-		t.Errorf("Walk(walktest): visited %d paths, want %d. Visited: %v", len(visited), len(expectedPaths), visited)
-		return
-	}
+	// For virtual directories (S3-like), directory prefixes may not be visited
+	// Only verify files are present
+	if config.VirtualDirectories {
+		// Should visit: walktest/file1.txt, walktest/file2.txt (directory may be absent)
+		if len(visited) < 2 {
+			t.Errorf("Walk(walktest): visited %d paths, want at least 2. Visited: %v", len(visited), visited)
+			return
+		}
+		// Verify files are in visited paths (order may vary)
+		hasFile1 := false
+		hasFile2 := false
+		for _, path := range visited {
+			if path == "walktest/file1.txt" {
+				hasFile1 = true
+			}
+			if path == "walktest/file2.txt" {
+				hasFile2 = true
+			}
+		}
+		if !hasFile1 {
+			t.Errorf("Walk(walktest): missing walktest/file1.txt in visited paths: %v", visited)
+		}
+		if !hasFile2 {
+			t.Errorf("Walk(walktest): missing walktest/file2.txt in visited paths: %v", visited)
+		}
+	} else {
+		// Walk should visit: walktest (dir), walktest/file1.txt, walktest/file2.txt
+		// The order should be lexical: directory first, then files in lexical order
+		expectedPaths := []string{"walktest", "walktest/file1.txt", "walktest/file2.txt"}
+		if len(visited) != len(expectedPaths) {
+			t.Errorf("Walk(walktest): visited %d paths, want %d. Visited: %v", len(visited), len(expectedPaths), visited)
+			return
+		}
 
-	for i, expected := range expectedPaths {
-		if visited[i] != expected {
-			t.Errorf("Walk(walktest): path[%d] = %q, want %q", i, visited[i], expected)
+		for i, expected := range expectedPaths {
+			if visited[i] != expected {
+				t.Errorf("Walk(walktest): path[%d] = %q, want %q", i, visited[i], expected)
+			}
 		}
 	}
 }
 
 // testWalkFSWithSubdirectories tests Walk() with nested subdirectories.
-func testWalkFSWithSubdirectories(t *testing.T, filesystem core.FS) {
+func testWalkFSWithSubdirectories(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Setup: Create a directory tree with subdirectories
 	if err := filesystem.MkdirAll("walkroot/subdir1", 0755); err != nil {
 		t.Fatalf("MkdirAll(walkroot/subdir1): setup failed: %v", err)
@@ -101,32 +134,73 @@ func testWalkFSWithSubdirectories(t *testing.T, filesystem core.FS) {
 		t.Fatalf("Walk(walkroot): got error %v, want nil", err)
 	}
 
-	// Verify all paths were visited in lexical order
-	// Expected order: walkroot (dir), walkroot/root.txt, walkroot/subdir1 (dir),
-	// walkroot/subdir1/file1.txt, walkroot/subdir2 (dir), walkroot/subdir2/file2.txt
-	expectedPaths := []string{
-		"walkroot",
-		"walkroot/root.txt",
-		"walkroot/subdir1",
-		"walkroot/subdir1/file1.txt",
-		"walkroot/subdir2",
-		"walkroot/subdir2/file2.txt",
-	}
+	// Verify all paths were visited
+	// For virtual directories (S3-like), directory prefixes may not be visited
+	if config.VirtualDirectories {
+		// Should visit at least the 3 files (directories may be absent)
+		if len(visited) < 3 {
+			t.Errorf("Walk(walkroot): visited %d paths, want at least 3. Visited: %v", len(visited), visited)
+			return
+		}
+		// Verify all files are present (order may vary)
+		hasRootFile := false
+		hasFile1 := false
+		hasFile2 := false
+		for _, path := range visited {
+			if path == "walkroot/root.txt" {
+				hasRootFile = true
+			}
+			if path == "walkroot/subdir1/file1.txt" {
+				hasFile1 = true
+			}
+			if path == "walkroot/subdir2/file2.txt" {
+				hasFile2 = true
+			}
+		}
+		if !hasRootFile {
+			t.Errorf("Walk(walkroot): missing walkroot/root.txt in visited paths: %v", visited)
+		}
+		if !hasFile1 {
+			t.Errorf("Walk(walkroot): missing walkroot/subdir1/file1.txt in visited paths: %v", visited)
+		}
+		if !hasFile2 {
+			t.Errorf("Walk(walkroot): missing walkroot/subdir2/file2.txt in visited paths: %v", visited)
+		}
+	} else {
+		// Verify all paths were visited in lexical order
+		// Expected order: walkroot (dir), walkroot/root.txt, walkroot/subdir1 (dir),
+		// walkroot/subdir1/file1.txt, walkroot/subdir2 (dir), walkroot/subdir2/file2.txt
+		expectedPaths := []string{
+			"walkroot",
+			"walkroot/root.txt",
+			"walkroot/subdir1",
+			"walkroot/subdir1/file1.txt",
+			"walkroot/subdir2",
+			"walkroot/subdir2/file2.txt",
+		}
 
-	if len(visited) != len(expectedPaths) {
-		t.Errorf("Walk(walkroot): visited %d paths, want %d. Visited: %v", len(visited), len(expectedPaths), visited)
-		return
-	}
+		if len(visited) != len(expectedPaths) {
+			t.Errorf("Walk(walkroot): visited %d paths, want %d. Visited: %v", len(visited), len(expectedPaths), visited)
+			return
+		}
 
-	for i, expected := range expectedPaths {
-		if visited[i] != expected {
-			t.Errorf("Walk(walkroot): path[%d] = %q, want %q", i, visited[i], expected)
+		for i, expected := range expectedPaths {
+			if visited[i] != expected {
+				t.Errorf("Walk(walkroot): path[%d] = %q, want %q", i, visited[i], expected)
+			}
 		}
 	}
 }
 
 // testWalkFSEmptyDirectory tests Walk() on an empty directory.
-func testWalkFSEmptyDirectory(t *testing.T, filesystem core.FS) {
+func testWalkFSEmptyDirectory(t *testing.T, filesystem core.FS, config FSTestConfig) {
+	// Skip if filesystem has virtual directories (S3-like)
+	// Empty directories cannot be walked in S3 because they don't exist as objects
+	if config.VirtualDirectories {
+		t.Skip("Skipping empty directory Walk test - filesystem has virtual directories")
+		return
+	}
+
 	// Setup: Create an empty directory
 	if err := filesystem.Mkdir("emptydir", 0755); err != nil {
 		t.Fatalf("Mkdir(emptydir): setup failed: %v", err)
@@ -158,7 +232,7 @@ func testWalkFSEmptyDirectory(t *testing.T, filesystem core.FS) {
 }
 
 // testWalkFSPathHandling tests Walk() verifies paths are correct.
-func testWalkFSPathHandling(t *testing.T, filesystem core.FS) {
+func testWalkFSPathHandling(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Setup: Create a test structure
 	if err := filesystem.MkdirAll("pathtest/nested", 0755); err != nil {
 		t.Fatalf("MkdirAll(pathtest/nested): setup failed: %v", err)
@@ -174,6 +248,11 @@ func testWalkFSPathHandling(t *testing.T, filesystem core.FS) {
 	err := filesystem.Walk("pathtest", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+
+		// For virtual directories, skip Stat check on directory entries
+		if config.VirtualDirectories && d.IsDir() {
+			return nil
 		}
 
 		// Verify the path is accessible via Stat

@@ -11,7 +11,13 @@ import (
 
 // TestSymlinkFS tests symlink operations (Symlink, Readlink).
 // Uses type assertion - skips if fs doesn't implement core.SymlinkFS.
+// Uses POSIXTestConfig() by default.
 func TestSymlinkFS(t *testing.T, filesystem core.FS) {
+	TestSymlinkFSWithConfig(t, filesystem, POSIXTestConfig())
+}
+
+// TestSymlinkFSWithConfig tests symlink operations with behavior configuration.
+func TestSymlinkFSWithConfig(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Type assert to check if filesystem supports SymlinkFS
 	sfs, ok := filesystem.(core.SymlinkFS)
 	if !ok {

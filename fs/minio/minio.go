@@ -1,0 +1,721 @@
+package minio
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/input-output-hk/catalyst-forge-libs/fs/core"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
+)
+
+// MinioFS implements core.FS for MinIO/S3-compatible storage.
+// Note: The name follows the package naming convention (LocalFS, MemoryFS, etc.)
+// used throughout the fs library to distinguish between different implementations.
+//
+//nolint:revive // MinioFS name is intentional to match naming pattern across fs implementations
+type MinioFS struct {
+	client             *minio.Client
+	bucket             string
+	prefix             string // Optional prefix for all keys
+	multipartThreshold int64  // Threshold for multipart uploads
+}
+
+// NewMinIO creates a MinIO-backed filesystem.
+// Returns error if configuration is invalid or connection fails.
+func NewMinIO(cfg Config) (*MinioFS, error) {
+	// Validate configuration
+	if err := cfg.validate(); err != nil {
+		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+
+	var client *minio.Client
+	var err error
+
+	// Use provided client or create new one
+	if cfg.Client != nil {
+		client = cfg.Client
+	} else {
+		// Create new MinIO client
+		client, err = minio.New(cfg.Endpoint, &minio.Options{
+			Creds:  credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
+			Secure: cfg.UseSSL,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create minio client: %w", err)
+		}
+	}
+
+	// Normalize prefix: use forward slashes, trim trailing slash
+	prefix := normalizePrefix(cfg.Prefix)
+
+	// Set default multipart threshold if not specified
+	multipartThreshold := cfg.MultipartThreshold
+	if multipartThreshold == 0 {
+		multipartThreshold = 5 * 1024 * 1024 // 5MB default
+	}
+
+	return &MinioFS{
+		client:             client,
+		bucket:             cfg.Bucket,
+		prefix:             prefix,
+		multipartThreshold: multipartThreshold,
+	}, nil
+}
+
+// normalizePrefix normalizes the prefix path:
+// - Converts backslashes to forward slashes
+// - Removes leading and trailing slashes
+// - Returns empty string if prefix is "." or empty.
+func normalizePrefix(prefix string) string {
+	if prefix == "" || prefix == "." {
+		return ""
+	}
+
+	// First convert backslashes to forward slashes (for Windows-style paths)
+	prefix = strings.ReplaceAll(prefix, "\\", "/")
+
+	// Clean the path (resolves . and ..)
+	prefix = filepath.Clean(prefix)
+
+	// Convert to forward slashes again (filepath.Clean may use OS separator)
+	prefix = filepath.ToSlash(prefix)
+
+	// Trim leading and trailing slashes
+	prefix = strings.Trim(prefix, "/")
+
+	return prefix
+}
+
+// normalize cleans a path and ensures forward slashes.
+// It applies: ToSlash → Clean → Trim slashes
+// Returns "." for empty paths.
+func normalize(path string) string {
+	if path == "" {
+		return "."
+	}
+
+	// First convert backslashes to forward slashes (for Windows-style paths)
+	path = strings.ReplaceAll(path, "\\", "/")
+
+	// Clean the path (resolves . and ..)
+	path = filepath.Clean(path)
+
+	// Convert to forward slashes again (filepath.Clean may use OS separator)
+	path = filepath.ToSlash(path)
+
+	// Trim leading and trailing slashes
+	path = strings.Trim(path, "/")
+
+	// Return "." if path is now empty
+	if path == "" {
+		return "."
+	}
+
+	return path
+}
+
+// joinPath joins the filesystem prefix with the given name.
+// It handles empty prefix correctly and uses forward slashes.
+func (m *MinioFS) joinPath(name string) string {
+	name = normalize(name)
+
+	// Handle special case where normalized name is "."
+	if name == "." {
+		if m.prefix == "" {
+			return ""
+		}
+		return m.prefix
+	}
+
+	if m.prefix == "" {
+		return name
+	}
+
+	return m.prefix + "/" + name
+}
+
+// translateError converts MinIO errors to stdlib fs errors.
+func translateError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	// Check MinIO error responses
+	errResp := minio.ToErrorResponse(err)
+
+	switch errResp.Code {
+	case "NoSuchKey":
+		return fs.ErrNotExist
+	case "NoSuchBucket":
+		return fs.ErrNotExist
+	case "AccessDenied":
+		return fs.ErrPermission
+	}
+
+	// Return wrapped error with context for other errors
+	return fmt.Errorf("minio: %w", err)
+}
+
+// Stub implementations for core.FS interface
+// These will be implemented in subsequent tasks
+
+// Open opens the named file for reading.
+func (m *MinioFS) Open(name string) (fs.File, error) {
+	key := m.joinPath(name)
+	return newFileRead(context.Background(), m, key, name)
+}
+
+// Stat returns file information for the named file.
+func (m *MinioFS) Stat(name string) (fs.FileInfo, error) {
+	key := m.joinPath(name)
+	ctx := context.Background()
+
+	// Use StatObject to get object metadata
+	info, err := m.client.StatObject(ctx, m.bucket, key, minio.StatObjectOptions{})
+	if err != nil {
+		return nil, &fs.PathError{Op: "stat", Path: name, Err: translateError(err)}
+	}
+
+	return &fileInfo{
+		name:    filepath.Base(name),
+		size:    info.Size,
+		modTime: info.LastModified,
+		mode:    0644,
+	}, nil
+}
+
+// ReadDir reads the directory named by name and returns a list of directory entries.
+func (m *MinioFS) ReadDir(name string) ([]fs.DirEntry, error) {
+	key := m.joinPath(name)
+	ctx := context.Background()
+
+	// Ensure key ends with "/" for directory listing (unless it's root)
+	if key != "" && !strings.HasSuffix(key, "/") {
+		key = key + "/"
+	}
+
+	var entries []fs.DirEntry
+
+	// List objects with delimiter to get directory structure
+	for object := range m.client.ListObjects(ctx, m.bucket, minio.ListObjectsOptions{
+		Prefix:    key,
+		Recursive: false, // Use delimiter for directory-like listing
+	}) {
+		if object.Err != nil {
+			return nil, &fs.PathError{Op: "readdir", Path: name, Err: translateError(object.Err)}
+		}
+
+		// Skip the directory itself if it appears as an object
+		if object.Key == key {
+			continue
+		}
+
+		// Get the name relative to the directory
+		relName := strings.TrimPrefix(object.Key, key)
+
+		// Check if this is a subdirectory (ends with /)
+		isDir := strings.HasSuffix(object.Key, "/")
+		if isDir {
+			relName = strings.TrimSuffix(relName, "/")
+		}
+
+		// Skip empty names
+		if relName == "" {
+			continue
+		}
+
+		// For files, use object metadata
+		entries = append(entries, &s3DirEntry{
+			name:    relName,
+			isDir:   isDir,
+			size:    object.Size,
+			modTime: object.LastModified,
+		})
+	}
+
+	// Sort entries by name
+	// Note: Go's fs.ReadDir contract requires sorting, but MinIO SDK returns
+	// results sorted by key already, so entries are already sorted
+	return entries, nil
+}
+
+// ReadFile reads the named file and returns the contents.
+func (m *MinioFS) ReadFile(name string) ([]byte, error) {
+	file, err := m.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return nil, &fs.PathError{Op: "readfile", Path: name, Err: err}
+	}
+
+	return data, nil
+}
+
+// Exists reports whether the named file or directory exists.
+func (m *MinioFS) Exists(name string) (bool, error) {
+	_, err := m.Stat(name)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	return false, err
+}
+
+// Create creates the named file for writing.
+func (m *MinioFS) Create(name string) (core.File, error) {
+	key := m.joinPath(name)
+	return newFileWrite(m, key, name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC), nil
+}
+
+// OpenFile opens the named file with the specified flags and permissions.
+// Supported flags: O_RDONLY, O_WRONLY, O_CREATE, O_TRUNC.
+// Unsupported flags: O_RDWR, O_APPEND, O_EXCL, O_SYNC (returns ErrUnsupported).
+func (m *MinioFS) OpenFile(name string, flag int, _ fs.FileMode) (core.File, error) {
+	// Check for unsupported flags
+	if flag&os.O_RDWR != 0 {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fmt.Errorf("%w: O_RDWR not supported in S3", core.ErrUnsupported)}
+	}
+	if flag&os.O_APPEND != 0 {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fmt.Errorf("%w: O_APPEND not supported in S3", core.ErrUnsupported)}
+	}
+	if flag&os.O_EXCL != 0 {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fmt.Errorf("%w: O_EXCL not supported in S3", core.ErrUnsupported)}
+	}
+	if flag&os.O_SYNC != 0 {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fmt.Errorf("%w: O_SYNC not supported in S3", core.ErrUnsupported)}
+	}
+
+	key := m.joinPath(name)
+
+	// Handle write modes
+	if flag&(os.O_WRONLY|os.O_CREATE) != 0 {
+		return newFileWrite(m, key, name, flag), nil
+	}
+
+	// Handle read mode (O_RDONLY or no flags)
+	return newFileRead(context.Background(), m, key, name)
+}
+
+// WriteFile writes data to the named file.
+func (m *MinioFS) WriteFile(name string, data []byte, _ fs.FileMode) error {
+	file, err := m.Create(name)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+
+	_, err = file.Write(data)
+	if err != nil {
+		return &fs.PathError{Op: "writefile", Path: name, Err: err}
+	}
+
+	if err := file.Close(); err != nil {
+		return &fs.PathError{Op: "writefile", Path: name, Err: err}
+	}
+
+	return nil
+}
+
+// Mkdir creates a new directory with the specified name and permissions.
+// In S3, directories are virtual, so this is a no-op that always succeeds.
+func (m *MinioFS) Mkdir(name string, _ fs.FileMode) error {
+	// S3 has virtual directories - no need to create them explicitly
+	// Just validate the path is normalized
+	_ = m.joinPath(name)
+	return nil
+}
+
+// MkdirAll creates a directory path, including any necessary parents.
+// In S3, directories are virtual, so this is a no-op that always succeeds.
+func (m *MinioFS) MkdirAll(path string, _ fs.FileMode) error {
+	// S3 has virtual directories - no need to create them explicitly
+	// Just validate the path is normalized
+	_ = m.joinPath(path)
+	return nil
+}
+
+// Remove removes the named file or directory.
+func (m *MinioFS) Remove(name string) error {
+	key := m.joinPath(name)
+	ctx := context.Background()
+
+	err := m.client.RemoveObject(ctx, m.bucket, key, minio.RemoveObjectOptions{})
+	if err != nil {
+		return &fs.PathError{Op: "remove", Path: name, Err: translateError(err)}
+	}
+
+	return nil
+}
+
+// RemoveAll removes path and any children it contains.
+func (m *MinioFS) RemoveAll(path string) error {
+	key := m.joinPath(path)
+	ctx := context.Background()
+
+	// Ensure key ends with "/" for recursive listing (unless it's root)
+	if key != "" && !strings.HasSuffix(key, "/") {
+		key = key + "/"
+	}
+
+	// List all objects with the prefix
+	objectsCh := make(chan minio.ObjectInfo)
+
+	go func() {
+		defer close(objectsCh)
+		for object := range m.client.ListObjects(ctx, m.bucket, minio.ListObjectsOptions{
+			Prefix:    key,
+			Recursive: true, // Recursive to get all objects
+		}) {
+			if object.Err != nil {
+				return
+			}
+			objectsCh <- object
+		}
+	}()
+
+	// Remove all objects
+	for object := range objectsCh {
+		err := m.client.RemoveObject(ctx, m.bucket, object.Key, minio.RemoveObjectOptions{})
+		if err != nil {
+			return &fs.PathError{Op: "removeall", Path: path, Err: translateError(err)}
+		}
+	}
+
+	return nil
+}
+
+// Rename renames (moves) oldpath to newpath.
+// In S3, this is implemented as CopyObject + RemoveObject.
+// For directories, this recursively copies all objects (expensive!).
+func (m *MinioFS) Rename(oldpath, newpath string) error {
+	oldKey := m.joinPath(oldpath)
+	newKey := m.joinPath(newpath)
+	ctx := context.Background()
+
+	// First, try to stat the oldpath to see if it's a file
+	_, err := m.Stat(oldpath)
+	if err == nil {
+		// It's a file, do simple copy
+		return m.renameFile(oldKey, newKey, oldpath)
+	}
+
+	// Check if it's a virtual directory by listing objects with prefix
+	dirPrefix := oldKey
+	if dirPrefix != "" && !strings.HasSuffix(dirPrefix, "/") {
+		dirPrefix = dirPrefix + "/"
+	}
+
+	// List all objects under this directory
+	var objectsToRename []string
+	for object := range m.client.ListObjects(ctx, m.bucket, minio.ListObjectsOptions{
+		Prefix:    dirPrefix,
+		Recursive: true,
+	}) {
+		if object.Err != nil {
+			return &fs.PathError{Op: "rename", Path: oldpath, Err: translateError(object.Err)}
+		}
+		objectsToRename = append(objectsToRename, object.Key)
+	}
+
+	// If no objects found, path doesn't exist
+	if len(objectsToRename) == 0 {
+		return &fs.PathError{Op: "rename", Path: oldpath, Err: fs.ErrNotExist}
+	}
+
+	// Copy all objects to new location
+	newPrefix := newKey
+	if newPrefix != "" && !strings.HasSuffix(newPrefix, "/") {
+		newPrefix = newPrefix + "/"
+	}
+
+	for _, objectKey := range objectsToRename {
+		// Calculate new key by replacing prefix
+		relPath := strings.TrimPrefix(objectKey, dirPrefix)
+		newObjectKey := newPrefix + relPath
+
+		// Copy object
+		src := minio.CopySrcOptions{
+			Bucket: m.bucket,
+			Object: objectKey,
+		}
+		dst := minio.CopyDestOptions{
+			Bucket: m.bucket,
+			Object: newObjectKey,
+		}
+
+		_, err := m.client.CopyObject(ctx, dst, src)
+		if err != nil {
+			return &fs.PathError{Op: "rename", Path: oldpath, Err: translateError(err)}
+		}
+	}
+
+	// Remove all old objects
+	for _, objectKey := range objectsToRename {
+		err := m.client.RemoveObject(ctx, m.bucket, objectKey, minio.RemoveObjectOptions{})
+		if err != nil {
+			// Copy succeeded but remove failed - this is a partially completed operation
+			return &fs.PathError{Op: "rename", Path: oldpath, Err: translateError(err)}
+		}
+	}
+
+	return nil
+}
+
+// renameFile renames a single file (helper method).
+// This is used by Rename() for simple file-to-file renames.
+func (m *MinioFS) renameFile(oldKey, newKey, oldpath string) error {
+	ctx := context.Background()
+
+	src := minio.CopySrcOptions{
+		Bucket: m.bucket,
+		Object: oldKey,
+	}
+	dst := minio.CopyDestOptions{
+		Bucket: m.bucket,
+		Object: newKey,
+	}
+
+	_, err := m.client.CopyObject(ctx, dst, src)
+	if err != nil {
+		return &fs.PathError{Op: "rename", Path: oldpath, Err: translateError(err)}
+	}
+
+	// Remove old object
+	err = m.client.RemoveObject(ctx, m.bucket, oldKey, minio.RemoveObjectOptions{})
+	if err != nil {
+		return &fs.PathError{Op: "rename", Path: oldpath, Err: translateError(err)}
+	}
+
+	return nil
+}
+
+// Walk walks the file tree rooted at root, calling walkFn for each file or directory.
+// For S3/MinIO, this handles virtual directories that don't exist as objects.
+func (m *MinioFS) Walk(root string, walkFn fs.WalkDirFunc) error {
+	rootKey := m.joinPath(root)
+	ctx := context.Background()
+
+	// For S3, we need special handling of the root since it might be a virtual directory
+	// First, check if root is a file
+	_, err := m.Stat(root)
+	if err == nil {
+		// Root is a file, use standard WalkDir
+		if walkErr := fs.WalkDir(m, root, walkFn); walkErr != nil {
+			return fmt.Errorf("walk %s: %w", root, walkErr)
+		}
+		return nil
+	}
+
+	// Root might be a virtual directory - check if any objects exist with this prefix
+	prefix := rootKey
+	if prefix != "" && !strings.HasSuffix(prefix, "/") {
+		prefix = prefix + "/"
+	}
+
+	// Check if any objects exist with this prefix
+	objectsCh := m.client.ListObjects(ctx, m.bucket, minio.ListObjectsOptions{
+		Prefix:    prefix,
+		Recursive: false,
+		MaxKeys:   1, // We only need to know if ANY object exists
+	})
+
+	// Read the first object (or error) from the channel
+	firstObject, ok := <-objectsCh
+	if !ok {
+		// Channel closed without any objects - directory doesn't exist
+		return &fs.PathError{Op: "walk", Path: root, Err: fs.ErrNotExist}
+	}
+
+	if firstObject.Err != nil {
+		return fmt.Errorf("walk %s: %w", root, translateError(firstObject.Err))
+	}
+
+	// At least one object exists with this prefix - it's a valid directory
+
+	// Virtual directory exists, manually walk it
+	return m.walkDir(root, rootKey, walkFn)
+}
+
+// walkDir recursively walks a directory tree.
+// This is a helper method for Walk() that handles virtual directories in S3.
+func (m *MinioFS) walkDir(name, key string, walkFn fs.WalkDirFunc) error {
+	ctx := context.Background()
+
+	// Create a synthetic directory entry for the root
+	rootEntry := &s3DirEntry{
+		name:  filepath.Base(name),
+		isDir: true,
+	}
+
+	// Call walkFn for the directory itself
+	if err := walkFn(name, rootEntry, nil); err != nil {
+		if errors.Is(err, fs.SkipDir) {
+			return nil
+		}
+		return err
+	}
+
+	// List immediate children
+	prefix := key
+	if prefix != "" && !strings.HasSuffix(prefix, "/") {
+		prefix = prefix + "/"
+	}
+
+	var entries []fs.DirEntry
+	for object := range m.client.ListObjects(ctx, m.bucket, minio.ListObjectsOptions{
+		Prefix:    prefix,
+		Recursive: false,
+	}) {
+		if object.Err != nil {
+			return translateError(object.Err)
+		}
+
+		// Skip the directory marker itself
+		if object.Key == prefix {
+			continue
+		}
+
+		relName := strings.TrimPrefix(object.Key, prefix)
+		isDir := strings.HasSuffix(object.Key, "/")
+		if isDir {
+			relName = strings.TrimSuffix(relName, "/")
+		}
+
+		if relName == "" {
+			continue
+		}
+
+		entries = append(entries, &s3DirEntry{
+			name:    relName,
+			isDir:   isDir,
+			size:    object.Size,
+			modTime: object.LastModified,
+		})
+	}
+
+	// Walk each entry
+	for _, entry := range entries {
+		if err := m.processWalkEntry(name, key, entry, walkFn); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// processWalkEntry processes a single entry during directory walking.
+// This is a helper method for walkDir() to reduce complexity.
+func (m *MinioFS) processWalkEntry(parentName, parentKey string, entry fs.DirEntry, walkFn fs.WalkDirFunc) error {
+	entryPath := filepath.Join(parentName, entry.Name())
+	entryKey := buildEntryKey(parentKey, entry.Name())
+
+	if entry.IsDir() {
+		return m.processWalkDirectory(entryPath, entryKey, walkFn)
+	}
+
+	return m.processWalkFile(entryPath, entry, walkFn)
+}
+
+// buildEntryKey constructs the S3 key for an entry.
+func buildEntryKey(parentKey, entryName string) string {
+	if parentKey != "" {
+		return parentKey + "/" + entryName
+	}
+	return entryName
+}
+
+// processWalkDirectory handles walking into a subdirectory.
+func (m *MinioFS) processWalkDirectory(entryPath, entryKey string, walkFn fs.WalkDirFunc) error {
+	err := m.walkDir(entryPath, entryKey, walkFn)
+	if errors.Is(err, fs.SkipDir) {
+		return nil // Skip this directory, continue with siblings
+	}
+	return err
+}
+
+// processWalkFile handles calling walkFn for a file entry.
+func (m *MinioFS) processWalkFile(entryPath string, entry fs.DirEntry, walkFn fs.WalkDirFunc) error {
+	err := walkFn(entryPath, entry, nil)
+	if errors.Is(err, fs.SkipDir) {
+		return nil // SkipDir on a file means stop walking
+	}
+	return err
+}
+
+// Chroot returns a new filesystem rooted at dir.
+func (m *MinioFS) Chroot(dir string) (core.FS, error) {
+	// Verify the directory exists (optional - could skip for S3 virtual dirs)
+	// For now, we'll skip the check since S3 has virtual directories
+
+	// Create new filesystem with extended prefix
+	newPrefix := m.joinPath(dir)
+
+	return &MinioFS{
+		client:             m.client,
+		bucket:             m.bucket,
+		prefix:             newPrefix,
+		multipartThreshold: m.multipartThreshold,
+	}, nil
+}
+
+// s3DirEntry implements fs.DirEntry for S3 objects and virtual directories.
+type s3DirEntry struct {
+	name    string
+	isDir   bool
+	size    int64
+	modTime time.Time
+}
+
+// Name returns the name of the entry.
+func (e *s3DirEntry) Name() string {
+	return e.name
+}
+
+// IsDir reports whether the entry describes a directory.
+func (e *s3DirEntry) IsDir() bool {
+	return e.isDir
+}
+
+// Type returns the type bits for the entry.
+func (e *s3DirEntry) Type() fs.FileMode {
+	if e.isDir {
+		return fs.ModeDir
+	}
+	return 0
+}
+
+// Info returns the FileInfo for the entry.
+func (e *s3DirEntry) Info() (fs.FileInfo, error) {
+	mode := fs.FileMode(0644)
+	if e.isDir {
+		mode = fs.ModeDir | 0755
+	}
+	return &fileInfo{
+		name:    e.name,
+		size:    e.size,
+		modTime: e.modTime,
+		mode:    mode,
+	}, nil
+}
+
+// Compile-time interface check.
+var _ core.FS = (*MinioFS)(nil)
+var _ fs.DirEntry = (*s3DirEntry)(nil)

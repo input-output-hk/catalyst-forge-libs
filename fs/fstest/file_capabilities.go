@@ -14,16 +14,25 @@ import (
 // TestFileCapabilities tests optional File-level capabilities.
 // Tests: io.Seeker, io.ReaderAt, io.WriterAt, core.Truncater, core.Syncer, fs.ReadDirFile.
 // Uses type assertions on files returned by the FS - skips unsupported capabilities.
+// Uses POSIXTestConfig() by default.
 func TestFileCapabilities(t *testing.T, filesystem core.FS) {
-	TestFileCapabilitiesWithSkip(t, filesystem, nil)
+	TestFileCapabilitiesWithConfig(t, filesystem, POSIXTestConfig())
 }
 
-// TestFileCapabilitiesWithSkip is the internal version with skip support
+// TestFileCapabilitiesWithSkip is the internal version with skip support.
+// Deprecated: Use TestFileCapabilitiesWithConfig instead.
 func TestFileCapabilitiesWithSkip(t *testing.T, filesystem core.FS, skipTests []string) {
+	config := POSIXTestConfig()
+	config.SkipTests = skipTests
+	TestFileCapabilitiesWithConfig(t, filesystem, config)
+}
+
+// TestFileCapabilitiesWithConfig tests file capabilities with behavior configuration.
+func TestFileCapabilitiesWithConfig(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Helper to check if a test should be skipped
 	shouldSkip := func(testName string) bool {
 		fullName := "FileCapabilities/" + testName
-		for _, skip := range skipTests {
+		for _, skip := range config.SkipTests {
 			if skip == fullName {
 				return true
 			}
@@ -37,49 +46,49 @@ func TestFileCapabilitiesWithSkip(t *testing.T, filesystem core.FS, skipTests []
 			t.Skip("Skipped by provider configuration")
 			return
 		}
-		testFileCapabilitySeeker(t, filesystem)
+		testFileCapabilitySeeker(t, filesystem, config)
 	})
 	t.Run("ReaderAt", func(t *testing.T) {
 		if shouldSkip("ReaderAt") {
 			t.Skip("Skipped by provider configuration")
 			return
 		}
-		testFileCapabilityReaderAt(t, filesystem)
+		testFileCapabilityReaderAt(t, filesystem, config)
 	})
 	t.Run("WriterAt", func(t *testing.T) {
 		if shouldSkip("WriterAt") {
 			t.Skip("Skipped by provider configuration")
 			return
 		}
-		testFileCapabilityWriterAt(t, filesystem)
+		testFileCapabilityWriterAt(t, filesystem, config)
 	})
 	t.Run("Truncater", func(t *testing.T) {
 		if shouldSkip("Truncater") {
 			t.Skip("Skipped by provider configuration")
 			return
 		}
-		testFileCapabilityTruncater(t, filesystem)
+		testFileCapabilityTruncater(t, filesystem, config)
 	})
 	t.Run("Syncer", func(t *testing.T) {
 		if shouldSkip("Syncer") {
 			t.Skip("Skipped by provider configuration")
 			return
 		}
-		testFileCapabilitySyncer(t, filesystem)
+		testFileCapabilitySyncer(t, filesystem, config)
 	})
 	t.Run("ReadDirFile", func(t *testing.T) {
 		if shouldSkip("ReadDirFile") {
 			t.Skip("Skipped by provider configuration")
 			return
 		}
-		testFileCapabilityReadDirFile(t, filesystem)
+		testFileCapabilityReadDirFile(t, filesystem, config)
 	})
 }
 
 // testFileCapabilitySeeker tests io.Seeker capability on file handles.
 //
 //nolint:gocyclo,cyclop // Test function with multiple validation checks
-func testFileCapabilitySeeker(t *testing.T, filesystem core.FS) {
+func testFileCapabilitySeeker(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Setup: Create a test file with known content
 	testContent := []byte("0123456789abcdefghijklmnopqrstuvwxyz")
 	if err := filesystem.WriteFile("seeker-test.txt", testContent, 0644); err != nil {
@@ -180,7 +189,7 @@ func testFileCapabilitySeeker(t *testing.T, filesystem core.FS) {
 // testFileCapabilityReaderAt tests io.ReaderAt capability on file handles.
 //
 //nolint:gocyclo,cyclop,funlen // Test function with multiple validation checks
-func testFileCapabilityReaderAt(t *testing.T, filesystem core.FS) {
+func testFileCapabilityReaderAt(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Setup: Create a test file with known content
 	testContent := []byte("0123456789abcdefghijklmnopqrstuvwxyz")
 	if err := filesystem.WriteFile("readerat-test.txt", testContent, 0644); err != nil {
@@ -291,7 +300,7 @@ func testFileCapabilityReaderAt(t *testing.T, filesystem core.FS) {
 // testFileCapabilityWriterAt tests io.WriterAt capability on file handles.
 //
 //nolint:gocyclo,cyclop,funlen // Test function with multiple validation checks
-func testFileCapabilityWriterAt(t *testing.T, filesystem core.FS) {
+func testFileCapabilityWriterAt(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Setup: Create a test file with known content
 	initialContent := []byte("0123456789abcdefghijklmnopqrstuvwxyz")
 	if err := filesystem.WriteFile("writerat-test.txt", initialContent, 0644); err != nil {
@@ -395,25 +404,25 @@ func testFileCapabilityWriterAt(t *testing.T, filesystem core.FS) {
 }
 
 // testFileCapabilityTruncater tests core.Truncater capability on file handles.
-func testFileCapabilityTruncater(t *testing.T, filesystem core.FS) {
+func testFileCapabilityTruncater(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Test 1: Truncate to smaller size
 	t.Run("TruncateSmaller", func(t *testing.T) {
-		testTruncateSmaller(t, filesystem)
+		testTruncateSmaller(t, filesystem, config)
 	})
 
 	// Test 2: Truncate to larger size
 	t.Run("TruncateLarger", func(t *testing.T) {
-		testTruncateLarger(t, filesystem)
+		testTruncateLarger(t, filesystem, config)
 	})
 
 	// Test 3: Truncate to same size
 	t.Run("TruncateSameSize", func(t *testing.T) {
-		testTruncateSameSize(t, filesystem)
+		testTruncateSameSize(t, filesystem, config)
 	})
 }
 
 // testTruncateSmaller tests truncating a file to a smaller size.
-func testTruncateSmaller(t *testing.T, filesystem core.FS) {
+func testTruncateSmaller(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Setup: Create a test file with known content
 	initialContent := []byte("0123456789abcdefghijklmnopqrstuvwxyz")
 	if err := filesystem.WriteFile("truncate-smaller.txt", initialContent, 0644); err != nil {
@@ -475,7 +484,7 @@ func testTruncateSmaller(t *testing.T, filesystem core.FS) {
 }
 
 // testTruncateLarger tests truncating a file to a larger size.
-func testTruncateLarger(t *testing.T, filesystem core.FS) {
+func testTruncateLarger(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Setup: Create a test file with known content
 	initialContent := []byte("0123456789")
 	if err := filesystem.WriteFile("truncate-larger.txt", initialContent, 0644); err != nil {
@@ -548,7 +557,7 @@ func testTruncateLarger(t *testing.T, filesystem core.FS) {
 }
 
 // testTruncateSameSize tests truncating a file to the same size.
-func testTruncateSameSize(t *testing.T, filesystem core.FS) {
+func testTruncateSameSize(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Setup: Create a test file with known content
 	initialContent := []byte("0123456789")
 	if err := filesystem.WriteFile("truncate-same.txt", initialContent, 0644); err != nil {
@@ -611,7 +620,7 @@ func testTruncateSameSize(t *testing.T, filesystem core.FS) {
 // testFileCapabilitySyncer tests core.Syncer capability on file handles.
 //
 //nolint:gocyclo,cyclop // Test function with multiple validation checks
-func testFileCapabilitySyncer(t *testing.T, filesystem core.FS) {
+func testFileCapabilitySyncer(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Setup: Create a test file
 	if err := filesystem.WriteFile("syncer-test.txt", []byte("initial"), 0644); err != nil {
 		t.Fatalf("WriteFile(syncer-test.txt): setup failed: %v", err)
@@ -703,7 +712,13 @@ func testFileCapabilitySyncer(t *testing.T, filesystem core.FS) {
 // testFileCapabilityReadDirFile tests fs.ReadDirFile capability on directory handles.
 //
 //nolint:gocyclo,cyclop,funlen // Test function with multiple validation checks
-func testFileCapabilityReadDirFile(t *testing.T, filesystem core.FS) {
+func testFileCapabilityReadDirFile(t *testing.T, filesystem core.FS, config FSTestConfig) {
+	// Skip if filesystem has virtual directories - can't Open() directories in S3
+	if config.VirtualDirectories {
+		t.Skip("Skipping ReadDirFile test - filesystem has virtual directories (can't Open directories)")
+		return
+	}
+
 	// Setup: Create a directory with some files
 	if err := filesystem.Mkdir("readdir-test", 0755); err != nil {
 		t.Fatalf("Mkdir(readdir-test): setup failed: %v", err)
@@ -817,31 +832,34 @@ func testFileCapabilityReadDirFile(t *testing.T, filesystem core.FS) {
 	}
 
 	// Test 3: ReadDir on empty directory
-	if err := filesystem.Mkdir("empty-readdir-test", 0755); err != nil {
-		t.Fatalf("Mkdir(empty-readdir-test): setup failed: %v", err)
-	}
-
-	f3, err := filesystem.Open("empty-readdir-test")
-	if err != nil {
-		t.Fatalf("Open(empty-readdir-test): got error %v, want nil", err)
-	}
-	defer func() {
-		if closeErr := f3.Close(); closeErr != nil {
-			t.Errorf("Close() f3: got error %v", closeErr)
+	// Skip if filesystem has virtual directories (S3-like) - empty dirs can't be opened
+	if !config.VirtualDirectories {
+		if err := filesystem.Mkdir("empty-readdir-test", 0755); err != nil {
+			t.Fatalf("Mkdir(empty-readdir-test): setup failed: %v", err)
 		}
-	}()
 
-	readDirFile3, ok := f3.(fs.ReadDirFile)
-	if !ok {
-		return // Already tested support above
-	}
+		f3, err := filesystem.Open("empty-readdir-test")
+		if err != nil {
+			t.Fatalf("Open(empty-readdir-test): got error %v, want nil", err)
+		}
+		defer func() {
+			if closeErr := f3.Close(); closeErr != nil {
+				t.Errorf("Close() f3: got error %v", closeErr)
+			}
+		}()
 
-	entriesEmpty, err := readDirFile3.ReadDir(-1)
-	if err != nil && !errors.Is(err, io.EOF) {
-		t.Errorf("ReadDir(-1) on empty directory: got error %v, want nil or EOF", err)
-		return
-	}
-	if len(entriesEmpty) != 0 {
-		t.Errorf("ReadDir(-1) on empty directory: got %d entries, want 0", len(entriesEmpty))
+		readDirFile3, ok := f3.(fs.ReadDirFile)
+		if !ok {
+			return // Already tested support above
+		}
+
+		entriesEmpty, err := readDirFile3.ReadDir(-1)
+		if err != nil && !errors.Is(err, io.EOF) {
+			t.Errorf("ReadDir(-1) on empty directory: got error %v, want nil or EOF", err)
+			return
+		}
+		if len(entriesEmpty) != 0 {
+			t.Errorf("ReadDir(-1) on empty directory: got %d entries, want 0", len(entriesEmpty))
+		}
 	}
 }

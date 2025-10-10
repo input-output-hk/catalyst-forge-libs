@@ -10,16 +10,25 @@ import (
 
 // TestWriteFS tests write operations: Create, OpenFile, WriteFile, Mkdir, MkdirAll.
 // Tests file creation, directory creation, and various write scenarios.
+// Uses POSIXTestConfig() by default.
 func TestWriteFS(t *testing.T, filesystem core.FS) {
-	TestWriteFSWithSkip(t, filesystem, nil)
+	TestWriteFSWithConfig(t, filesystem, POSIXTestConfig())
 }
 
-// TestWriteFSWithSkip is the internal version with skip support
+// TestWriteFSWithSkip is the internal version with skip support.
+// Deprecated: Use TestWriteFSWithConfig instead.
 func TestWriteFSWithSkip(t *testing.T, filesystem core.FS, skipTests []string) {
+	config := POSIXTestConfig()
+	config.SkipTests = skipTests
+	TestWriteFSWithConfig(t, filesystem, config)
+}
+
+// TestWriteFSWithConfig tests write operations with behavior configuration.
+func TestWriteFSWithConfig(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Helper to check if a test should be skipped
 	shouldSkip := func(testName string) bool {
 		fullName := "WriteFS/" + testName
-		for _, skip := range skipTests {
+		for _, skip := range config.SkipTests {
 			if skip == fullName {
 				return true
 			}
@@ -33,47 +42,47 @@ func TestWriteFSWithSkip(t *testing.T, filesystem core.FS, skipTests []string) {
 			t.Skip("Skipped by provider configuration")
 			return
 		}
-		testWriteFSCreate(t, filesystem)
+		testWriteFSCreate(t, filesystem, config)
 	})
 	t.Run("WriteFile", func(t *testing.T) {
 		if shouldSkip("WriteFile") {
 			t.Skip("Skipped by provider configuration")
 			return
 		}
-		testWriteFSWriteFile(t, filesystem)
+		testWriteFSWriteFile(t, filesystem, config)
 	})
 	t.Run("OpenFile", func(t *testing.T) {
 		if shouldSkip("OpenFile") {
 			t.Skip("Skipped by provider configuration")
 			return
 		}
-		testWriteFSOpenFile(t, filesystem)
+		testWriteFSOpenFile(t, filesystem, config)
 	})
 	t.Run("Mkdir", func(t *testing.T) {
 		if shouldSkip("Mkdir") {
 			t.Skip("Skipped by provider configuration")
 			return
 		}
-		testWriteFSMkdir(t, filesystem)
+		testWriteFSMkdir(t, filesystem, config)
 	})
 	t.Run("MkdirAll", func(t *testing.T) {
 		if shouldSkip("MkdirAll") {
 			t.Skip("Skipped by provider configuration")
 			return
 		}
-		testWriteFSMkdirAll(t, filesystem)
+		testWriteFSMkdirAll(t, filesystem, config)
 	})
 	t.Run("CreateInNonExistentDir", func(t *testing.T) {
 		if shouldSkip("CreateInNonExistentDir") {
 			t.Skip("Skipped by provider configuration")
 			return
 		}
-		testWriteFSCreateError(t, filesystem)
+		testWriteFSCreateError(t, filesystem, config)
 	})
 }
 
 // testWriteFSCreate tests Create() new file, write data, verify contents.
-func testWriteFSCreate(t *testing.T, filesystem core.FS) {
+func testWriteFSCreate(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	testData := []byte("test data for Create")
 
 	// Create a new file
@@ -112,7 +121,7 @@ func testWriteFSCreate(t *testing.T, filesystem core.FS) {
 // testWriteFSWriteFile tests WriteFile() convenience method.
 // Tests that WriteFile creates the file with perm parameter, but doesn't verify
 // actual permissions on disk (per testing philosophy lines 297-313).
-func testWriteFSWriteFile(t *testing.T, filesystem core.FS) {
+func testWriteFSWriteFile(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	testData := []byte("test data for WriteFile")
 
 	// Write file with perm parameter
@@ -147,7 +156,7 @@ func testWriteFSWriteFile(t *testing.T, filesystem core.FS) {
 }
 
 // testWriteFSOpenFile tests OpenFile() with various flags.
-func testWriteFSOpenFile(t *testing.T, filesystem core.FS) {
+func testWriteFSOpenFile(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	testData := []byte("test data for OpenFile")
 
 	// Test O_CREATE flag
@@ -213,11 +222,17 @@ func testWriteFSOpenFile(t *testing.T, filesystem core.FS) {
 }
 
 // testWriteFSMkdir tests Mkdir() single directory creation.
-func testWriteFSMkdir(t *testing.T, filesystem core.FS) {
+func testWriteFSMkdir(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Create a single directory
 	err := filesystem.Mkdir("testdir", 0755)
 	if err != nil {
 		t.Fatalf("Mkdir(%q): got error %v, want nil", "testdir", err)
+	}
+
+	// Skip Stat verification if filesystem has virtual directories
+	if config.VirtualDirectories {
+		// For virtual directories, just verify Mkdir succeeded (no-op is fine)
+		return
 	}
 
 	// Verify the directory was created
@@ -232,11 +247,17 @@ func testWriteFSMkdir(t *testing.T, filesystem core.FS) {
 }
 
 // testWriteFSMkdirAll tests MkdirAll() nested directory creation.
-func testWriteFSMkdirAll(t *testing.T, filesystem core.FS) {
+func testWriteFSMkdirAll(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Create nested directories
 	err := filesystem.MkdirAll("parent/child/grandchild", 0755)
 	if err != nil {
 		t.Fatalf("MkdirAll(%q): got error %v, want nil", "parent/child/grandchild", err)
+	}
+
+	// Skip Stat verification if filesystem has virtual directories
+	if config.VirtualDirectories {
+		// For virtual directories, just verify MkdirAll succeeded (no-op is fine)
+		return
 	}
 
 	// Verify the full path exists
@@ -270,7 +291,13 @@ func testWriteFSMkdirAll(t *testing.T, filesystem core.FS) {
 }
 
 // testWriteFSCreateError tests error case: Create in non-existent directory returns error.
-func testWriteFSCreateError(t *testing.T, filesystem core.FS) {
+func testWriteFSCreateError(t *testing.T, filesystem core.FS, config FSTestConfig) {
+	// Skip if filesystem allows implicit parent directory creation (S3-like)
+	if config.ImplicitParentDirs {
+		t.Skip("Skipping Create error test - filesystem allows implicit parent directories")
+		return
+	}
+
 	// Try to create a file in a non-existent directory
 	_, err := filesystem.Create("nonexistent/testfile.txt")
 	if err == nil {

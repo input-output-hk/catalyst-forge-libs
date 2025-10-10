@@ -9,7 +9,13 @@ import (
 
 // TestTempFS tests temporary file operations (TempFile, TempDir).
 // Uses type assertion - skips if fs doesn't implement core.TempFS.
+// Uses POSIXTestConfig() by default.
 func TestTempFS(t *testing.T, filesystem core.FS) {
+	TestTempFSWithConfig(t, filesystem, POSIXTestConfig())
+}
+
+// TestTempFSWithConfig tests temporary file operations with behavior configuration.
+func TestTempFSWithConfig(t *testing.T, filesystem core.FS, config FSTestConfig) {
 	// Type assert to check if filesystem supports TempFS
 	tfs, ok := filesystem.(core.TempFS)
 	if !ok {
