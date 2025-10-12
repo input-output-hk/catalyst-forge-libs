@@ -1,13 +1,13 @@
 package schema
 
 import (
-	"github.com/input-output-hk/catalyst-forge-libs/schema/phases"
-	"github.com/input-output-hk/catalyst-forge-libs/schema/publishers"
+	ph "github.com/input-output-hk/catalyst-forge-libs/schema/phases"
+	pub "github.com/input-output-hk/catalyst-forge-libs/schema/publishers"
 )
 
 // Hidden fields to satisfy CUE's import usage checker
-_usePhases:     phases.#PhaseDefinition
-_usePublishers: publishers.#PublisherConfig
+_usePhases:     ph.#PhaseDefinition
+_usePublishers: pub.#PublisherConfig
 
 // RepoConfig defines repository-level configuration for Catalyst Forge.
 // This is the root configuration for an entire repository.
@@ -17,9 +17,9 @@ _usePublishers: publishers.#PublisherConfig
 	// Git tagging strategy
 	tagging: #TaggingStrategy
 	// Map of phase names to phase definitions
-	phases: [string]: phases.#PhaseDefinition
+	phases: [string]: ph.#PhaseDefinition
 	// Map of publisher names to publisher configurations
-	publishers: [string]: publishers.#PublisherConfig
+	publishers: [string]: pub.#PublisherConfig
 }
 
 // TaggingStrategy defines how git tags should be applied in the repository.

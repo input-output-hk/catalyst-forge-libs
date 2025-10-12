@@ -1,11 +1,11 @@
 package schema
 
 import (
-	"github.com/input-output-hk/catalyst-forge-libs/schema/artifacts"
+	art "github.com/input-output-hk/catalyst-forge-libs/schema/artifacts"
 )
 
 // Hidden field to satisfy CUE's import usage checker
-_useArtifacts: artifacts.#ArtifactSpec
+_useArtifacts: art.#ArtifactSpec
 
 // ProjectConfig defines project-level configuration for Catalyst Forge.
 // This is the configuration for an individual project within a repository.
@@ -15,7 +15,7 @@ _useArtifacts: artifacts.#ArtifactSpec
 	// Map of phase names to phase participation
 	phases: [string]: #PhaseParticipation
 	// Map of artifact names to artifact specifications
-	artifacts: [string]: artifacts.#ArtifactSpec
+	artifacts: [string]: art.#ArtifactSpec
 	// Optional release configuration
 	release?: #ReleaseConfig
 	// Optional deployment configuration

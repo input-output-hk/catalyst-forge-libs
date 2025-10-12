@@ -2,6 +2,12 @@
 
 package schema
 
+import (
+	"github.com/input-output-hk/catalyst-forge-libs/schema/artifacts"
+	"github.com/input-output-hk/catalyst-forge-libs/schema/phases"
+	"github.com/input-output-hk/catalyst-forge-libs/schema/publishers"
+)
+
 // ProjectConfig defines project-level configuration for Catalyst Forge.
 // This is the configuration for an individual project within a repository.
 type ProjectConfig struct {
@@ -12,8 +18,7 @@ type ProjectConfig struct {
 	Phases map[string]PhaseParticipation `json:"phases"`
 
 	// Map of artifact names to artifact specifications
-	Artifacts struct {
-	} `json:"artifacts"`
+	Artifacts map[string]artifacts.ArtifactSpec `json:"artifacts"`
 
 	// Optional release configuration
 	Release *ReleaseConfig `json:"release,omitempty"`
@@ -101,12 +106,10 @@ type RepoConfig struct {
 	Tagging TaggingStrategy `json:"tagging"`
 
 	// Map of phase names to phase definitions
-	Phases struct {
-	} `json:"phases"`
+	Phases map[string]phases.PhaseDefinition `json:"phases"`
 
 	// Map of publisher names to publisher configurations
-	Publishers struct {
-	} `json:"publishers"`
+	Publishers map[string]publishers.PublisherConfig `json:"publishers"`
 }
 
 // TaggingStrategy defines how git tags should be applied in the repository.
